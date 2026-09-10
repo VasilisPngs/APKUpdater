@@ -5,12 +5,9 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.material3.Surface
-import androidx.compose.ui.Modifier
 import com.example.ui.ApkUpdaterScreen
 import com.example.ui.ApkUpdaterViewModel
-import com.example.ui.theme.MyApplicationTheme
+import com.example.ui.theme.ApkUpdaterTheme
 
 class MainActivity : ComponentActivity() {
     private val viewModel: ApkUpdaterViewModel by viewModels()
@@ -19,10 +16,8 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         setContent {
-            MyApplicationTheme {
-                Surface(modifier = Modifier.fillMaxSize()) {
-                    ApkUpdaterScreen(viewModel = viewModel)
-                }
+            ApkUpdaterTheme {
+                ApkUpdaterScreen(viewModel = viewModel)
             }
         }
     }
