@@ -5,7 +5,7 @@
 
 ## Release & Versioning Rules
 - The release version is fixed to `1.0.0` (`APKUpdater-1.0.0`). Do not bump or change this version unless explicitly requested by the user.
-- GitHub Actions workflow is set up at `.github/workflows/release.yml` to automatically build and publish `APKUpdater-1.0.` to GitHub Releases on push to `main` or manual trigger.
+- GitHub Actions workflow is set up at `.github/workflows/release.yml` to automatically build and publish `APKUpdater-1.0.0` to GitHub Releases on push to `main` or manual trigger.
 
 # Rules
 
