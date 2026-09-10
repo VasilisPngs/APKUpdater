@@ -38,8 +38,9 @@ class AppUpdateRepository(
     }
 
     suspend fun getInstalledApps(includeSystem: Boolean = true): List<InstalledApp> = withContext(Dispatchers.IO) {
-        val flags = PackageManager.MATCH_ALL.toLong() or PackageManager.GET_SIGNING_CERTIFICATES.toLong()
-        val packages = packageManager.getInstalledPackages(PackageManager.PackageInfoFlags.of(flags))
+        val packages = packageManager.getInstalledPackages(
+            PackageManager.PackageInfoFlags.of(PackageManager.GET_SIGNING_CERTIFICATES.toLong())
+        )
 
         packages.mapNotNull { pkg ->
             runCatching {
@@ -119,9 +120,13 @@ class AppUpdateRepository(
             .mapNotNull { data ->
                 val installed = appMap[data.pname] ?: return@mapNotNull null
                 val release = data.release ?: return@mapNotNull null
-                val releaseVersion = release.version ?: return@mapNotNull null
 
-                if (onlyStable && isNonStableVersion(releaseVersion, release.link.orEmpty(), release.whatsNew.orEmpty())) {
+                if (onlyStable && isNonStableVersion(
+                        release.version.orEmpty(),
+                        release.link.orEmpty(),
+                        release.whatsNew.orEmpty()
+                    )
+                ) {
                     return@mapNotNull null
                 }
 
@@ -148,7 +153,7 @@ class AppUpdateRepository(
                     appName = installed.appName,
                     currentVersionName = installed.versionName,
                     currentVersionCode = installed.versionCode,
-                    newVersionName = releaseVersion,
+                    newVersionName = release.version.orEmpty(),
                     newVersionCode = bestApk.versionCode,
                     publishDate = bestApk.publishDate ?: release.publishDate,
                     whatsNew = release.whatsNew,
