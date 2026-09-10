@@ -69,6 +69,4 @@ dependencies {
     implementation(libs.retrofit)
     implementation(libs.converter.moshi)
     implementation(libs.kotlinx.coroutines.android)
-
-    debugImplementation(libs.androidx.compose.ui.tooling)
 }
