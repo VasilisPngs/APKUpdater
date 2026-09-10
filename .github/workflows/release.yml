@@ -45,27 +45,27 @@ jobs:
         env:
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
         run: |
-          if [ -f release.keystore ]; then
-            ./gradlew :app:assembleRelease --no-daemon
-          else
-            ./gradlew :app:assembleDebug --no-daemon
-          fi
+          ./gradlew :app:assembleRelease --no-daemon
 
       - name: Publish Release
         env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG_NAME: v1.0.0
         run: |
-          REPO_NAME="${{ github.event.repository.name }}"
           APK_FILE=$(find app/build/outputs/apk -name "*.apk" | head -n 1)
+          if [ -z "$APK_FILE" ]; then
+            echo "Error: No APK file generated!"
+            exit 1
+          fi
           TARGET_APK="APKUpdater-1.0.0.apk"
           cp "$APK_FILE" "$TARGET_APK"
+          ls -la "$TARGET_APK"
 
           # Replace existing release and tag if already present
-          gh release delete "$TAG_NAME" --yes 2>/dev/null || true
-          git tag -d "$TAG_NAME" 2>/dev/null || true
-          git push origin ":refs/tags/$TAG_NAME" 2>/dev/null || true
+          gh release delete "$TAG_NAME" --repo "${{ github.repository }}" --yes --cleanup-tag 2>/dev/null || true
 
           # Release notes stay empty: single space body so GitHub does not autofill commits
-          gh release create "$TAG_NAME" "$TARGET_APK" --title "$TARGET_APK" --notes " "
+          gh release create "$TAG_NAME" "$TARGET_APK" --repo "${{ github.repository }}" --title "$TARGET_APK" --notes " "
+
 

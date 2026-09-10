@@ -23,18 +23,17 @@ android {
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
   }
 
+  val releaseKeystore = rootProject.file("release.keystore")
+  val hasKeystore = releaseKeystore.exists() && !System.getenv("ANDROID_KEYSTORE_PASSWORD").isNullOrEmpty()
+
   signingConfigs {
-    create("release") {
-      storeFile = rootProject.file("release.keystore")
-      storePassword = System.getenv("ANDROID_KEYSTORE_PASSWORD")
-      keyAlias = System.getenv("ANDROID_KEY_ALIAS") ?: "release"
-      keyPassword = System.getenv("ANDROID_KEYSTORE_PASSWORD")
-    }
-    create("debugConfig") {
-      storeFile = rootProject.file("debug.keystore")
-      storePassword = "android"
-      keyAlias = "androiddebugkey"
-      keyPassword = "android"
+    if (hasKeystore) {
+      create("release") {
+        storeFile = releaseKeystore
+        storePassword = System.getenv("ANDROID_KEYSTORE_PASSWORD")
+        keyAlias = System.getenv("ANDROID_KEY_ALIAS") ?: "release"
+        keyPassword = System.getenv("ANDROID_KEYSTORE_PASSWORD")
+      }
     }
   }
 
@@ -43,9 +42,11 @@ android {
       isCrunchPngs = false
       isMinifyEnabled = false
       proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
-      signingConfig = signingConfigs.getByName("release")
+      if (hasKeystore) {
+        signingConfig = signingConfigs.getByName("release")
+      }
     }
-    debug { signingConfig = signingConfigs.getByName("debugConfig") }
+    debug { }
   }
   compileOptions {
     sourceCompatibility = JavaVersion.VERSION_11
