@@ -1,4 +1,4 @@
-# Project Instructions
+# Projects Instructions
 
 ## Git & Repository Workflow
 - For git operations and GitHub updates on this repository, push direct commits to the `main` branch instead of opening Pull Requests.
