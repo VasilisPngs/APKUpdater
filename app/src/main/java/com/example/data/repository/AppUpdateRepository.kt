@@ -31,12 +31,7 @@ class AppUpdateRepository(
     private val deviceAbis = Build.SUPPORTED_ABIS.map(String::lowercase).toSet()
 
     suspend fun getInstalledApps(includeSystem: Boolean = true): List<InstalledApp> = withContext(Dispatchers.IO) {
-        val packages = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            packageManager.getInstalledPackages(PackageManager.PackageInfoFlags.of(0L))
-        } else {
-            @Suppress("DEPRECATION")
-            packageManager.getInstalledPackages(0)
-        }
+        val packages = packageManager.getInstalledPackages(PackageManager.PackageInfoFlags.of(0L))
 
         packages.mapNotNull { pkg ->
             runCatching {
