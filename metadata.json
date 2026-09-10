@@ -1,0 +1,6 @@
+{
+  "name": "APKUpdater",
+  "description": "Scan installed device apps and check for updates via APKMirror",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
