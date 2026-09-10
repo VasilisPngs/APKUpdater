@@ -1,5 +1,5 @@
 [versions]
-agp = "9.1.1"
+agp = "9.2.0"
 kotlin = "2.4.20"
 composeBom = "2026.08.00"
 coreKtx = "1.19.0"
@@ -13,9 +13,9 @@ retrofit = "3.0.0"
 converterMoshi = "3.0.0"
 okhttp = "5.3.0"
 moshi = "1.15.2"
-kotlinxCoroutines = "1.10.2"
+kotlinxCoroutines = "1.11.0"
 robolectric = "4.16.1"
-roborazzi = "1.59.0"
+roborazzi = "1.63.0"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
