@@ -24,7 +24,7 @@ jobs:
       - name: Set up JDK
         uses: actions/setup-java@v4
         with:
-          distribution: 'temurin'
+          distribution: temurin
           java-version: '21'
 
       - name: Setup Gradle
@@ -33,52 +33,40 @@ jobs:
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
 
-      - name: Prepare Keystore
+      - name: Prepare release keystore
         env:
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
         run: |
-          if [ -f release.keystore.enc ] && [ -n "$ANDROID_KEYSTORE_PASSWORD" ]; then
-            openssl enc -d -aes-256-cbc -pbkdf2 -in release.keystore.enc -out release.keystore -k "$ANDROID_KEYSTORE_PASSWORD"
+          if [ ! -f release.keystore.enc ]; then
+            echo "release.keystore.enc is missing"
+            exit 1
           fi
-          if [ ! -f release.keystore ]; then
-            if [ -f debug.keystore.base64 ]; then
-              base64 -d debug.keystore.base64 > debug.keystore
-            elif [ ! -f debug.keystore ]; then
-              keytool -genkeypair -v -keystore debug.keystore -alias androiddebugkey -keyalg RSA -keysize 2048 -validity 10000 -storepass android -keypass android -dname "CN=Android Debug,O=Android,C=US"
-            fi
+          if [ -z "$ANDROID_KEYSTORE_PASSWORD" ]; then
+            echo "ANDROID_KEYSTORE_PASSWORD is not configured"
+            exit 1
           fi
+          openssl enc -d -aes-256-cbc -pbkdf2 \
+            -in release.keystore.enc \
+            -out release.keystore \
+            -k "$ANDROID_KEYSTORE_PASSWORD"
+          test -s release.keystore
 
       - name: Build APK
         env:
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
-        run: |
-          ./gradlew :app:assembleRelease --no-daemon
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+        run: ./gradlew :app:assembleRelease --no-daemon
 
       - name: Publish Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG_NAME: v1.0.0
         run: |
-          APK_FILE=$(find app/build/outputs/apk/release -name "app-release.apk" | head -n 1)
-          if [ -z "$APK_FILE" ]; then
-            APK_FILE=$(find app/build/outputs/apk -name "*.apk" -not -name "*unsigned*" | head -n 1)
-          fi
-          if [ -z "$APK_FILE" ]; then
-            APK_FILE=$(find app/build/outputs/apk -name "*.apk" | head -n 1)
-          fi
-          if [ -z "$APK_FILE" ]; then
-            echo "Error: No APK file generated!"
-            exit 1
-          fi
-          TARGET_APK="APKUpdater-1.0.0.apk"
-          cp "$APK_FILE" "$TARGET_APK"
-          ls -la "$TARGET_APK"
-
-          # Replace existing release and tag if already present
+          APK_FILE="app/build/outputs/apk/release/app-release.apk"
+          test -f "$APK_FILE"
+          cp "$APK_FILE" "APKUpdater-1.0.0.apk"
           gh release delete "$TAG_NAME" --repo "${{ github.repository }}" --yes --cleanup-tag 2>/dev/null || true
-
-          # Release notes stay empty: single space body so GitHub does not autofill commits
-          gh release create "$TAG_NAME" "$TARGET_APK" --repo "${{ github.repository }}" --title "$TARGET_APK" --notes " "
-
-
+          gh release create "$TAG_NAME" "APKUpdater-1.0.0.apk" \
+            --repo "${{ github.repository }}" \
+            --title "APKUpdater-1.0.0" \
+            --notes " "
