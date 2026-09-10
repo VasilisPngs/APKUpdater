@@ -1,7 +1,7 @@
-package com.example.data.api
+package com.android.apkupdater.data.api
 
-import com.example.data.model.AppExistsRequest
-import com.example.data.model.AppExistsResponse
+import com.android.apkupdater.data.model.AppExistsRequest
+import com.android.apkupdater.data.model.AppExistsResponse
 import com.squareup.moshi.Moshi
 import com.squareup.moshi.kotlin.reflect.KotlinJsonAdapterFactory
 import okhttp3.OkHttpClient
