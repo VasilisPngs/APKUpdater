@@ -25,7 +25,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.OpenInBrowser
@@ -54,7 +53,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsStateWithLifecycle
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -77,19 +76,19 @@ fun ApkUpdaterScreen(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
-    val scanStatus by viewModel.scanStatus.collectAsStateWithLifecycle()
-    val installedApps by viewModel.installedApps.collectAsStateWithLifecycle()
-    val updates by viewModel.updates.collectAsStateWithLifecycle()
-    val selectedFilter by viewModel.selectedFilter.collectAsStateWithLifecycle()
-    val searchQuery by viewModel.searchQuery.collectAsStateWithLifecycle()
-    val includeSystemApps by viewModel.includeSystemApps.collectAsStateWithLifecycle()
-    val onlyStable by viewModel.onlyStable.collectAsStateWithLifecycle()
+    val scanStatus by viewModel.scanStatus.collectAsState()
+    val installedApps by viewModel.installedApps.collectAsState()
+    val updates by viewModel.updates.collectAsState()
+    val selectedFilter by viewModel.selectedFilter.collectAsState()
+    val searchQuery by viewModel.searchQuery.collectAsState()
+    val includeSystemApps by viewModel.includeSystemApps.collectAsState()
+    val onlyStable by viewModel.onlyStable.collectAsState()
+    var showSettings by remember { mutableStateOf(false) }
 
-    var showSettingsSheet by remember { mutableStateOf(false) }
     val isScanning = scanStatus is ScanStatus.Scanning
     val userApps = installedApps.filterNot(InstalledApp::isSystemApp)
     val systemApps = installedApps.filter(InstalledApp::isSystemApp)
-    val updatePackages = updates.asSequence().map(AppUpdateInfo::packageName).toSet()
+    val updatePackages = updates.map(AppUpdateInfo::packageName).toSet()
 
     val filteredUpdates = updates.filter { update ->
         searchQuery.isBlank() ||
@@ -124,7 +123,7 @@ fun ApkUpdaterScreen(
                             Icon(Icons.Default.Refresh, contentDescription = "Check for updates")
                         }
                     }
-                    IconButton(onClick = { showSettingsSheet = true }) {
+                    IconButton(onClick = { showSettings = true }) {
                         Icon(Icons.Default.Settings, contentDescription = "Settings")
                     }
                 }
@@ -137,7 +136,7 @@ fun ApkUpdaterScreen(
                 .padding(innerPadding)
         ) {
             ScanStatusSection(
-                scanStatus = scanStatus,
+                status = scanStatus,
                 updatesCount = updates.size,
                 appsCount = if (includeSystemApps) installedApps.size else userApps.size,
                 onScanClick = viewModel::scanForUpdates
@@ -150,9 +149,7 @@ fun ApkUpdaterScreen(
                     .fillMaxWidth()
                     .padding(horizontal = 16.dp, vertical = 8.dp),
                 placeholder = { Text("Search apps") },
-                leadingIcon = {
-                    Icon(Icons.Default.Search, contentDescription = null)
-                },
+                leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
                 trailingIcon = {
                     if (searchQuery.isNotEmpty()) {
                         IconButton(onClick = { viewModel.setSearchQuery("") }) {
@@ -205,7 +202,7 @@ fun ApkUpdaterScreen(
                 } else {
                     LazyColumn(
                         modifier = Modifier.fillMaxSize(),
-                        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 16.dp),
+                        contentPadding = PaddingValues(16.dp),
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         items(filteredUpdates, key = { it.packageName }) { update ->
@@ -216,39 +213,37 @@ fun ApkUpdaterScreen(
                         }
                     }
                 }
+            } else if (filteredApps.isEmpty()) {
+                EmptyAppsView(searchQuery)
             } else {
-                if (filteredApps.isEmpty()) {
-                    EmptyAppsView(searchQuery)
-                } else {
-                    LazyColumn(
-                        modifier = Modifier.fillMaxSize(),
-                        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 16.dp),
-                        verticalArrangement = Arrangement.spacedBy(4.dp)
-                    ) {
-                        items(filteredApps, key = { it.packageName }) { app ->
-                            InstalledAppListItem(
-                                app = app,
-                                hasUpdate = app.packageName in updatePackages,
-                                onOpenApkMirror = {
-                                    val url = "https://www.apkmirror.com/?post_type=app_release&searchtype=app&s=${Uri.encode(app.packageName)}"
-                                    openUrlInBrowser(context, url)
-                                }
-                            )
-                        }
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(horizontal = 16.dp, bottom = 16.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    items(filteredApps, key = { it.packageName }) { app ->
+                        InstalledAppListItem(
+                            app = app,
+                            hasUpdate = app.packageName in updatePackages,
+                            onOpenApkMirror = {
+                                val url = "https://www.apkmirror.com/?post_type=app_release&searchtype=app&s=${Uri.encode(app.packageName)}"
+                                openUrlInBrowser(context, url)
+                            }
+                        )
                     }
                 }
             }
         }
     }
 
-    if (showSettingsSheet) {
-        ModalBottomSheet(onDismissRequest = { showSettingsSheet = false }) {
+    if (showSettings) {
+        ModalBottomSheet(onDismissRequest = { showSettings = false }) {
             SettingsContent(
                 includeSystemApps = includeSystemApps,
                 onlyStable = onlyStable,
                 onIncludeSystemAppsChange = viewModel::setIncludeSystemApps,
                 onOnlyStableChange = viewModel::setOnlyStable,
-                onClose = { showSettingsSheet = false }
+                onClose = { showSettings = false }
             )
         }
     }
@@ -256,20 +251,20 @@ fun ApkUpdaterScreen(
 
 @Composable
 private fun ScanStatusSection(
-    scanStatus: ScanStatus,
+    status: ScanStatus,
     updatesCount: Int,
     appsCount: Int,
     onScanClick: () -> Unit
 ) {
-    when (scanStatus) {
+    when (status) {
         is ScanStatus.Scanning -> {
             ListItem(
                 headlineContent = { Text("Checking for updates") },
-                supportingContent = { Text("${scanStatus.processed} of ${scanStatus.total} · ${scanStatus.currentBatch}") },
+                supportingContent = { Text("${status.processed} of ${status.total} · ${status.currentBatch}") },
                 trailingContent = { CircularProgressIndicator() }
             )
             LinearProgressIndicator(
-                progress = { if (scanStatus.total == 0) 0f else scanStatus.processed.toFloat() / scanStatus.total },
+                progress = { if (status.total == 0) 0f else status.processed.toFloat() / status.total },
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 16.dp)
@@ -287,27 +282,21 @@ private fun ScanStatusSection(
                     Text(if (updatesCount > 0) "$updatesCount updates available" else "All apps are up to date")
                 },
                 supportingContent = { Text("Checked $appsCount installed apps") },
-                trailingContent = {
-                    TextButton(onClick = onScanClick) { Text("Check again") }
-                }
+                trailingContent = { TextButton(onClick = onScanClick) { Text("Check again") } }
             )
         }
         is ScanStatus.Error -> {
             ListItem(
                 headlineContent = { Text("Update check failed") },
-                supportingContent = { Text(scanStatus.message) },
-                trailingContent = {
-                    TextButton(onClick = onScanClick) { Text("Retry") }
-                }
+                supportingContent = { Text(status.message) },
+                trailingContent = { TextButton(onClick = onScanClick) { Text("Retry") } }
             )
         }
         ScanStatus.Idle -> {
             ListItem(
                 headlineContent = { Text("Ready to check for updates") },
                 supportingContent = { Text("APKMirror") },
-                trailingContent = {
-                    TextButton(onClick = onScanClick) { Text("Check now") }
-                }
+                trailingContent = { TextButton(onClick = onScanClick) { Text("Check now") } }
             )
         }
     }
@@ -323,58 +312,40 @@ private fun UpdateListItem(
     Card(modifier = Modifier.fillMaxWidth()) {
         Column {
             ListItem(
-                leadingContent = {
-                    AppIconImage(update.packageName, Modifier.size(48.dp))
-                },
+                leadingContent = { AppIconImage(update.packageName, Modifier.size(48.dp)) },
                 headlineContent = {
                     Text(update.appName, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 },
                 supportingContent = {
-                    Text(
-                        "v${update.currentVersionName}  →  v${update.newVersionName}",
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
+                    Text("v${update.currentVersionName} → v${update.newVersionName}")
                 },
                 trailingContent = {
-                    FilledTonalUpdateButton(onClick = onOpenApkMirror)
+                    androidx.compose.material3.FilledTonalButton(onClick = onOpenApkMirror) {
+                        Icon(Icons.Default.OpenInBrowser, contentDescription = null)
+                        Spacer(Modifier.width(8.dp))
+                        Text("Open")
+                    }
                 }
             )
-            HorizontalDivider()
-            ListItem(
-                headlineContent = { Text("APKMirror") },
-                supportingContent = {
-                    val details = buildList {
-                        if (update.architectures.isNotEmpty()) add(update.architectures.joinToString(", "))
-                        if (!update.publishDate.isNullOrBlank()) add(update.publishDate)
-                    }
-                    Text(details.joinToString(" · ").ifBlank { "Latest compatible release" })
-                },
-                trailingContent = if (!update.whatsNew.isNullOrBlank()) {
-                    {
+            if (!update.whatsNew.isNullOrBlank()) {
+                HorizontalDivider()
+                ListItem(
+                    headlineContent = { Text("Changelog") },
+                    supportingContent = {
+                        Text(
+                            if (showChangelog) update.whatsNew.orEmpty() else "View release notes",
+                            maxLines = if (showChangelog) 20 else 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    },
+                    trailingContent = {
                         TextButton(onClick = { showChangelog = !showChangelog }) {
-                            Text(if (showChangelog) "Hide changelog" else "Changelog")
+                            Text(if (showChangelog) "Hide" else "Show")
                         }
                     }
-                } else null
-            )
-            if (showChangelog && !update.whatsNew.isNullOrBlank()) {
-                Text(
-                    update.whatsNew.orEmpty(),
-                    style = MaterialTheme.typography.bodyMedium,
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
                 )
             }
         }
-    }
-}
-
-@Composable
-private fun FilledTonalUpdateButton(onClick: () -> Unit) {
-    androidx.compose.material3.FilledTonalButton(onClick = onClick) {
-        Icon(Icons.Default.OpenInBrowser, contentDescription = null)
-        Spacer(Modifier.width(8.dp))
-        Text("Open")
     }
 }
 
@@ -385,9 +356,7 @@ private fun InstalledAppListItem(
     onOpenApkMirror: () -> Unit
 ) {
     ListItem(
-        leadingContent = {
-            AppIconImage(app.packageName, Modifier.size(48.dp))
-        },
+        leadingContent = { AppIconImage(app.packageName, Modifier.size(48.dp)) },
         headlineContent = {
             Text(app.appName, maxLines = 1, overflow = TextOverflow.Ellipsis)
         },
@@ -413,7 +382,10 @@ private fun InstalledAppListItem(
 }
 
 @Composable
-private fun AppIconImage(packageName: String, modifier: Modifier = Modifier) {
+private fun AppIconImage(
+    packageName: String,
+    modifier: Modifier = Modifier
+) {
     val context = LocalContext.current
     val bitmap = remember(packageName) {
         runCatching {
@@ -482,25 +454,17 @@ private fun EmptyUpdatesView(
         contentAlignment = Alignment.Center
     ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Icon(
-                Icons.Default.CheckCircle,
-                contentDescription = null,
-                modifier = Modifier.size(48.dp)
-            )
+            Icon(Icons.Default.CheckCircle, contentDescription = null, modifier = Modifier.size(48.dp))
             Spacer(Modifier.height(16.dp))
-            Text("No updates found", style = MaterialTheme.typography.headlineSmall)
+            Text("No updates found", style = MaterialTheme.typography.titleLarge)
             Spacer(Modifier.height(8.dp))
             Text(
-                if (isScanning) "Checking your installed apps…" else "Your selected apps have no available updates.",
+                if (isScanning) "Checking your installed apps…" else "All checked apps are up to date.",
                 style = MaterialTheme.typography.bodyMedium
             )
             if (!isScanning) {
                 Spacer(Modifier.height(16.dp))
-                Button(onClick = onScanClick) {
-                    Icon(Icons.Default.Refresh, contentDescription = null)
-                    Spacer(Modifier.width(8.dp))
-                    Text("Check again")
-                }
+                TextButton(onClick = onScanClick) { Text("Check again") }
             }
         }
     }
@@ -509,31 +473,24 @@ private fun EmptyUpdatesView(
 @Composable
 private fun EmptyAppsView(searchQuery: String) {
     Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .navigationBarsPadding()
-            .padding(32.dp),
+        modifier = Modifier.fillMaxSize().padding(32.dp),
         contentAlignment = Alignment.Center
     ) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Icon(Icons.Default.Search, contentDescription = null, modifier = Modifier.size(48.dp))
-            Spacer(Modifier.height(16.dp))
-            Text(
-                if (searchQuery.isBlank()) "No applications found" else "No apps match \"$searchQuery\"",
-                style = MaterialTheme.typography.titleLarge
-            )
-        }
+        Text(
+            if (searchQuery.isNotEmpty()) "No apps matching \"$searchQuery\"" else "No applications found",
+            style = MaterialTheme.typography.titleMedium
+        )
     }
 }
 
 private fun drawableToBitmap(drawable: Drawable): Bitmap {
     if (drawable is BitmapDrawable && drawable.bitmap != null) return drawable.bitmap
-    val width = if (drawable.intrinsicWidth > 0) drawable.intrinsicWidth else 96
-    val height = if (drawable.intrinsicHeight > 0) drawable.intrinsicHeight else 96
+    val width = drawable.intrinsicWidth.coerceAtLeast(96)
+    val height = drawable.intrinsicHeight.coerceAtLeast(96)
     return Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888).also { bitmap ->
-        Canvas(bitmap).also { canvas ->
-            drawable.setBounds(0, 0, canvas.width, canvas.height)
-            drawable.draw(canvas)
+        Canvas(bitmap).apply {
+            drawable.setBounds(0, 0, width, height)
+            drawable.draw(this)
         }
     }
 }
