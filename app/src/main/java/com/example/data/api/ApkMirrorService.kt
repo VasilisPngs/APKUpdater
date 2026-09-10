@@ -16,7 +16,7 @@ interface ApkMirrorService {
 
     @Headers(
         "User-Agent: APKUpdater/1.0.0",
-        "Authorization: Basic YXBpLWFwa3VwZGF0ZXI6cm01cmNmcnVVakx5MDRzTXB5TVBKWFc4"
+        "Authorization: Basic YXBpLWFwa3VwZGF0ZXI6cm01cmNmcnVVakp5MDRzTXB5TVBKWFc4"
     )
     @POST("wp-json/apkm/v1/app_exists/")
     suspend fun appExists(@Body request: AppExistsRequest): AppExistsResponse
