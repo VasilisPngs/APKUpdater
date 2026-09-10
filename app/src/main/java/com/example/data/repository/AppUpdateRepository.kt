@@ -81,12 +81,16 @@ class AppUpdateRepository(
             emit(ScanStatus.Scanning(processed, appsToCheck.size, batch.last().appName))
         }
 
-        if (failedBatches == batches.size) {
-            emit(ScanStatus.Error("Unable to reach APKMirror.", updates))
-        } else if (failedBatches > 0) {
-            emit(ScanStatus.Error("Some applications could not be checked.", updates))
-        } else {
-            emit(ScanStatus.Success(updates, appsToCheck))
+        when {
+            failedBatches == batches.size -> {
+                emit(ScanStatus.Error("Unable to reach APKMirror.", updates))
+            }
+            failedBatches > 0 -> {
+                emit(ScanStatus.Error("Some applications could not be checked.", updates))
+            }
+            else -> {
+                emit(ScanStatus.Success(updates, appsToCheck))
+            }
         }
     }.flowOn(Dispatchers.IO)
 
@@ -100,13 +104,19 @@ class AppUpdateRepository(
             .filter { it.exists == true }
             .mapNotNull { data ->
                 val installed = appMap[data.pname] ?: return@mapNotNull null
-                if (onlyStable && isNonStableVersion(data.release?.version.orEmpty(), data.release?.link.orEmpty())) return@mapNotNull null
+                val releaseVersion = data.release?.version.orEmpty()
+                if (onlyStable && isNonStableVersion(releaseVersion, data.release?.link.orEmpty())) {
+                    return@mapNotNull null
+                }
 
                 val bestApk = data.apks.asSequence()
                     .filter(::filterArch)
                     .filter(::filterMinApi)
                     .filter { !onlyStable || !isNonStableVersion(it.description.orEmpty(), it.link) }
-                    .filter { it.versionCode > installed.versionCode }
+                    .filter { apk ->
+                        apk.versionCode > installed.versionCode ||
+                            (apk.versionCode <= installed.versionCode && isNewerVersion(releaseVersion, installed.versionName))
+                    }
                     .maxByOrNull(AppExistsApk::versionCode)
                     ?: return@mapNotNull null
 
@@ -118,7 +128,7 @@ class AppUpdateRepository(
                     appName = installed.appName,
                     currentVersionName = installed.versionName,
                     currentVersionCode = installed.versionCode,
-                    newVersionName = data.release?.version ?: "Update Available",
+                    newVersionName = releaseVersion.ifEmpty { "Update Available" },
                     newVersionCode = bestApk.versionCode,
                     publishDate = bestApk.publishDate ?: data.release?.publishDate,
                     whatsNew = data.release?.whatsNew,
@@ -128,6 +138,29 @@ class AppUpdateRepository(
                 )
             }
             .toList()
+    }
+
+    private fun isNewerVersion(candidate: String, installed: String): Boolean {
+        if (candidate.isBlank() || installed.isBlank() || installed == "Unknown") return false
+
+        val candidateParts = candidate
+            .split(Regex("[^0-9]+"))
+            .filter(String::isNotEmpty)
+            .map { it.toLongOrNull() ?: return false }
+        val installedParts = installed
+            .split(Regex("[^0-9]+"))
+            .filter(String::isNotEmpty)
+            .map { it.toLongOrNull() ?: return false }
+
+        if (candidateParts.isEmpty() || installedParts.isEmpty()) return false
+
+        val size = maxOf(candidateParts.size, installedParts.size)
+        for (index in 0 until size) {
+            val candidatePart = candidateParts.getOrElse(index) { 0L }
+            val installedPart = installedParts.getOrElse(index) { 0L }
+            if (candidatePart != installedPart) return candidatePart > installedPart
+        }
+        return false
     }
 
     private fun isNonStableVersion(vararg texts: String): Boolean {
