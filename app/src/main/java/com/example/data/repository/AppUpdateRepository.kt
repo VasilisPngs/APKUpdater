@@ -15,6 +15,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.withContext
+import java.security.MessageDigest
 
 sealed interface ScanStatus {
     data object Idle : ScanStatus
@@ -28,10 +29,16 @@ class AppUpdateRepository(
     private val service: ApkMirrorService = ApkMirrorService.create()
 ) {
     private val packageManager = context.packageManager
-    private val deviceAbis = Build.SUPPORTED_ABIS.map(String::lowercase).toSet()
+    private val deviceArch = when {
+        Build.SUPPORTED_ABIS.any { it == "x86" || it == "x86_64" } -> "x86"
+        Build.SUPPORTED_ABIS.any { it == "armeabi-v7a" } -> "arm"
+        Build.SUPPORTED_ABIS.any { it == "arm64-v8a" } -> "arm"
+        else -> "arm"
+    }
 
     suspend fun getInstalledApps(includeSystem: Boolean = true): List<InstalledApp> = withContext(Dispatchers.IO) {
-        val packages = packageManager.getInstalledPackages(PackageManager.PackageInfoFlags.of(0L))
+        val flags = PackageManager.MATCH_ALL.toLong() or PackageManager.GET_SIGNING_CERTIFICATES.toLong()
+        val packages = packageManager.getInstalledPackages(PackageManager.PackageInfoFlags.of(flags))
 
         packages.mapNotNull { pkg ->
             runCatching {
@@ -39,11 +46,22 @@ class AppUpdateRepository(
                 val isSystem = (appInfo.flags and ApplicationInfo.FLAG_SYSTEM) != 0 ||
                     (appInfo.flags and ApplicationInfo.FLAG_UPDATED_SYSTEM_APP) != 0
                 if (!includeSystem && isSystem) return@mapNotNull null
+
+                val signatureSha1 = pkg.signingInfo?.apkContentsSigners
+                    ?.firstOrNull()
+                    ?.let { signer ->
+                        MessageDigest.getInstance("SHA-1")
+                            .digest(signer.toByteArray())
+                            .joinToString("") { byte -> "%02x".format(byte) }
+                    }
+                    .orEmpty()
+
                 InstalledApp(
                     packageName = pkg.packageName,
                     appName = appInfo.loadLabel(packageManager).toString().trim().ifEmpty { pkg.packageName },
                     versionName = pkg.versionName ?: "Unknown",
                     versionCode = pkg.longVersionCode,
+                    signatureSha1 = signatureSha1,
                     isSystemApp = isSystem,
                     firstInstallTime = pkg.firstInstallTime,
                     lastUpdateTime = pkg.lastUpdateTime
@@ -61,8 +79,8 @@ class AppUpdateRepository(
             return@flow
         }
 
-        val exclude = if (onlyStable) listOf("alpha", "beta", "pre-release", "dev") else emptyList()
-        val batches = appsToCheck.chunked(30)
+        val exclude = if (onlyStable) listOf("alpha", "beta") else emptyList()
+        val batches = appsToCheck.chunked(100)
         val updates = mutableListOf<AppUpdateInfo>()
         var processed = 0
         var failedBatches = 0
@@ -82,15 +100,9 @@ class AppUpdateRepository(
         }
 
         when {
-            failedBatches == batches.size -> {
-                emit(ScanStatus.Error("Unable to reach APKMirror.", updates))
-            }
-            failedBatches > 0 -> {
-                emit(ScanStatus.Error("Some applications could not be checked.", updates))
-            }
-            else -> {
-                emit(ScanStatus.Success(updates, appsToCheck))
-            }
+            failedBatches == batches.size -> emit(ScanStatus.Error("Unable to reach APKMirror.", updates))
+            failedBatches > 0 -> emit(ScanStatus.Error("Some applications could not be checked.", updates))
+            else -> emit(ScanStatus.Success(updates, appsToCheck))
         }
     }.flowOn(Dispatchers.IO)
 
@@ -100,38 +112,44 @@ class AppUpdateRepository(
         onlyStable: Boolean
     ): List<AppUpdateInfo> {
         val appMap = installedBatch.associateBy(InstalledApp::packageName)
+
         return apiDataList.asSequence()
             .filter { it.exists == true }
             .mapNotNull { data ->
                 val installed = appMap[data.pname] ?: return@mapNotNull null
-                val releaseVersion = data.release?.version.orEmpty()
-                if (onlyStable && isNonStableVersion(releaseVersion, data.release?.link.orEmpty())) {
+                val release = data.release ?: return@mapNotNull null
+
+                if (onlyStable && isNonStableVersion(release.version, release.link.orEmpty(), release.whatsNew.orEmpty())) {
                     return@mapNotNull null
                 }
 
                 val bestApk = data.apks.asSequence()
+                    .filter { apk -> filterSignature(apk, installed.signatureSha1) }
                     .filter(::filterArch)
                     .filter(::filterMinApi)
-                    .filter { !onlyStable || !isNonStableVersion(it.description.orEmpty(), it.link) }
                     .filter { apk ->
-                        apk.versionCode > installed.versionCode ||
-                            (apk.versionCode <= installed.versionCode && isNewerVersion(releaseVersion, installed.versionName))
+                        !onlyStable || !isNonStableVersion(apk.description.orEmpty(), apk.link)
                     }
+                    .filter { apk -> apk.versionCode > installed.versionCode }
                     .maxByOrNull(AppExistsApk::versionCode)
                     ?: return@mapNotNull null
 
-                val link = bestApk.link.ifEmpty { data.release?.link ?: data.app?.link.orEmpty() }
-                val url = if (link.startsWith("http://") || link.startsWith("https://")) link else "https://www.apkmirror.com$link"
+                val link = bestApk.link
+                val url = if (link.startsWith("http://") || link.startsWith("https://")) {
+                    link
+                } else {
+                    "https://www.apkmirror.com$link"
+                }
 
                 AppUpdateInfo(
-                    packageName = data.pname,
+                    packageName = installed.packageName,
                     appName = installed.appName,
                     currentVersionName = installed.versionName,
                     currentVersionCode = installed.versionCode,
-                    newVersionName = releaseVersion.ifEmpty { "Update Available" },
+                    newVersionName = release.version,
                     newVersionCode = bestApk.versionCode,
-                    publishDate = bestApk.publishDate ?: data.release?.publishDate,
-                    whatsNew = data.release?.whatsNew,
+                    publishDate = bestApk.publishDate ?: release.publishDate,
+                    whatsNew = release.whatsNew,
                     apkMirrorUrl = url,
                     architectures = bestApk.arches,
                     isSystemApp = installed.isSystemApp
@@ -140,40 +158,27 @@ class AppUpdateRepository(
             .toList()
     }
 
-    private fun isNewerVersion(candidate: String, installed: String): Boolean {
-        if (candidate.isBlank() || installed.isBlank() || installed == "Unknown") return false
-
-        val candidateParts = candidate
-            .split(Regex("[^0-9]+"))
-            .filter(String::isNotEmpty)
-            .map { it.toLongOrNull() ?: return false }
-        val installedParts = installed
-            .split(Regex("[^0-9]+"))
-            .filter(String::isNotEmpty)
-            .map { it.toLongOrNull() ?: return false }
-
-        if (candidateParts.isEmpty() || installedParts.isEmpty()) return false
-
-        val size = maxOf(candidateParts.size, installedParts.size)
-        for (index in 0 until size) {
-            val candidatePart = candidateParts.getOrElse(index) { 0L }
-            val installedPart = installedParts.getOrElse(index) { 0L }
-            if (candidatePart != installedPart) return candidatePart > installedPart
+    private fun filterSignature(apk: AppExistsApk, installedSignatureSha1: String): Boolean {
+        val signatures = apk.signaturesSha1.orEmpty()
+        return signatures.isEmpty() || installedSignatureSha1.isEmpty() || signatures.any {
+            it.equals(installedSignatureSha1, ignoreCase = true)
         }
-        return false
-    }
-
-    private fun isNonStableVersion(vararg texts: String): Boolean {
-        val pattern = Regex("(^|[^a-z])(alpha|beta|pre[- ]?release|preview|rc|canary|dev|nightly|snapshot|experimental)([^a-z]|$)")
-        return texts.any { pattern.containsMatchIn(it.lowercase()) }
     }
 
     private fun filterArch(apk: AppExistsApk): Boolean {
         if (apk.arches.isEmpty()) return true
         val arches = apk.arches.map(String::lowercase)
         if (arches.any { it == "universal" || it == "noarch" }) return true
-        return arches.any { it in deviceAbis }
+        return arches.any { it == deviceArch }
     }
 
-    private fun filterMinApi(apk: AppExistsApk): Boolean = apk.minapi?.toIntOrNull()?.let { it <= Build.VERSION.SDK_INT } ?: true
+    private fun filterMinApi(apk: AppExistsApk): Boolean = apk.minapi
+        ?.toIntOrNull()
+        ?.let { it <= Build.VERSION.SDK_INT }
+        ?: true
+
+    private fun isNonStableVersion(vararg texts: String): Boolean {
+        val pattern = Regex("(^|[^a-z])(alpha|beta|pre[- ]?release|preview|rc|canary|dev|nightly|snapshot|experimental)([^a-z]|$)")
+        return texts.any { pattern.containsMatchIn(it.lowercase()) }
+    }
 }
