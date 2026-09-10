@@ -5,6 +5,7 @@ data class InstalledApp(
     val appName: String,
     val versionName: String,
     val versionCode: Long,
+    val signatureSha1: String,
     val isSystemApp: Boolean,
     val firstInstallTime: Long = 0L,
     val lastUpdateTime: Long = 0L
