@@ -8,12 +8,10 @@ import com.example.data.model.AppUpdateInfo
 import com.example.data.model.InstalledApp
 import com.example.data.repository.AppUpdateRepository
 import com.example.data.repository.ScanStatus
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
 data class UiState(
@@ -29,31 +27,24 @@ data class UiState(
 )
 
 class ApkUpdaterViewModel(application: Application) : AndroidViewModel(application) {
-
     private val repository = AppUpdateRepository(application.applicationContext)
-
     private val _scanStatus = MutableStateFlow<ScanStatus>(ScanStatus.Idle)
-    val scanStatus: StateFlow<ScanStatus> = _scanStatus.asStateFlow()
-
     private val _installedApps = MutableStateFlow<List<InstalledApp>>(emptyList())
-    val installedApps: StateFlow<List<InstalledApp>> = _installedApps.asStateFlow()
-
     private val _updates = MutableStateFlow<List<AppUpdateInfo>>(emptyList())
-    val updates: StateFlow<List<AppUpdateInfo>> = _updates.asStateFlow()
-
     private val _selectedFilter = MutableStateFlow(AppFilter.UPDATES_ONLY)
-    val selectedFilter: StateFlow<AppFilter> = _selectedFilter.asStateFlow()
-
     private val _searchQuery = MutableStateFlow("")
-    val searchQuery: StateFlow<String> = _searchQuery.asStateFlow()
-
     private val _includeSystemApps = MutableStateFlow(false)
-    val includeSystemApps: StateFlow<Boolean> = _includeSystemApps.asStateFlow()
-
     private val _onlyStable = MutableStateFlow(true)
-    val onlyStable: StateFlow<Boolean> = _onlyStable.asStateFlow()
-
     private val _lastScanTime = MutableStateFlow<Long?>(null)
+    private var scanJob: Job? = null
+
+    val scanStatus: StateFlow<ScanStatus> = _scanStatus.asStateFlow()
+    val installedApps: StateFlow<List<InstalledApp>> = _installedApps.asStateFlow()
+    val updates: StateFlow<List<AppUpdateInfo>> = _updates.asStateFlow()
+    val selectedFilter: StateFlow<AppFilter> = _selectedFilter.asStateFlow()
+    val searchQuery: StateFlow<String> = _searchQuery.asStateFlow()
+    val includeSystemApps: StateFlow<Boolean> = _includeSystemApps.asStateFlow()
+    val onlyStable: StateFlow<Boolean> = _onlyStable.asStateFlow()
     val lastScanTime: StateFlow<Long?> = _lastScanTime.asStateFlow()
 
     init {
@@ -62,39 +53,31 @@ class ApkUpdaterViewModel(application: Application) : AndroidViewModel(applicati
 
     fun loadInstalledApps(autoScan: Boolean = false) {
         viewModelScope.launch {
-            val apps = repository.getInstalledApps(includeSystem = true)
+            val apps = repository.getInstalledApps()
             _installedApps.value = apps
-            if (autoScan) {
-                scanForUpdates()
-            }
+            if (autoScan) scanForUpdates()
         }
     }
 
     fun scanForUpdates() {
-        viewModelScope.launch {
+        scanJob?.cancel()
+        scanJob = viewModelScope.launch {
             val allApps = _installedApps.value.ifEmpty {
-                val loaded = repository.getInstalledApps(includeSystem = true)
-                _installedApps.value = loaded
-                loaded
+                repository.getInstalledApps().also { _installedApps.value = it }
             }
+            val appsToCheck = if (_includeSystemApps.value) allApps else allApps.filterNot(InstalledApp::isSystemApp)
 
-            val appsToCheck = if (_includeSystemApps.value) {
-                allApps
-            } else {
-                allApps.filter { !it.isSystemApp }
-            }
-
-            repository.scanForUpdates(
-                appsToCheck = appsToCheck,
-                onlyStable = _onlyStable.value
-            ).collect { status ->
+            repository.scanForUpdates(appsToCheck, _onlyStable.value).collect { status ->
                 _scanStatus.value = status
-                if (status is ScanStatus.Success) {
-                    _updates.value = status.updates
-                    _lastScanTime.value = System.currentTimeMillis()
-                    if (status.updates.isEmpty() && _selectedFilter.value == AppFilter.UPDATES_ONLY) {
-                        _selectedFilter.value = AppFilter.USER_APPS
+                when (status) {
+                    is ScanStatus.Success -> {
+                        _updates.value = status.updates
+                        _lastScanTime.value = System.currentTimeMillis()
                     }
+                    is ScanStatus.Error -> {
+                        _updates.value = status.partialUpdates
+                    }
+                    else -> Unit
                 }
             }
         }
@@ -109,12 +92,19 @@ class ApkUpdaterViewModel(application: Application) : AndroidViewModel(applicati
     }
 
     fun setIncludeSystemApps(include: Boolean) {
+        if (_includeSystemApps.value == include) return
         _includeSystemApps.value = include
         scanForUpdates()
     }
 
     fun setOnlyStable(onlyStable: Boolean) {
+        if (_onlyStable.value == onlyStable) return
         _onlyStable.value = onlyStable
         scanForUpdates()
+    }
+
+    override fun onCleared() {
+        scanJob?.cancel()
+        super.onCleared()
     }
 }
