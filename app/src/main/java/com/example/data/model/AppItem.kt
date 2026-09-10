@@ -1,4 +1,4 @@
-package com.example.data.model
+package com.android.apkupdater.data.model
 
 data class InstalledApp(
     val packageName: String,
