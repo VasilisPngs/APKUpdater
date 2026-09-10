@@ -123,8 +123,7 @@ fun ApkUpdaterScreen(
     val selectedFilter by viewModel.selectedFilter.collectAsState()
     val searchQuery by viewModel.searchQuery.collectAsState()
     val includeSystemApps by viewModel.includeSystemApps.collectAsState()
-    val ignoreAlpha by viewModel.ignoreAlpha.collectAsState()
-    val ignoreBeta by viewModel.ignoreBeta.collectAsState()
+    val onlyStable by viewModel.onlyStable.collectAsState()
     val lastScanTime by viewModel.lastScanTime.collectAsState()
 
     var showSettingsSheet by remember { mutableStateOf(false) }
@@ -397,10 +396,8 @@ fun ApkUpdaterScreen(
             SettingsSheetContent(
                 includeSystemApps = includeSystemApps,
                 onIncludeSystemAppsChange = { viewModel.setIncludeSystemApps(it) },
-                ignoreAlpha = ignoreAlpha,
-                onIgnoreAlphaChange = { viewModel.setIgnoreAlpha(it) },
-                ignoreBeta = ignoreBeta,
-                onIgnoreBetaChange = { viewModel.setIgnoreBeta(it) },
+                onlyStable = onlyStable,
+                onOnlyStableChange = { viewModel.setOnlyStable(it) },
                 onClose = { showSettingsSheet = false }
             )
         }
@@ -897,10 +894,8 @@ fun AppIconImage(
 fun SettingsSheetContent(
     includeSystemApps: Boolean,
     onIncludeSystemAppsChange: (Boolean) -> Unit,
-    ignoreAlpha: Boolean,
-    onIgnoreAlphaChange: (Boolean) -> Unit,
-    ignoreBeta: Boolean,
-    onIgnoreBetaChange: (Boolean) -> Unit,
+    onlyStable: Boolean,
+    onOnlyStableChange: (Boolean) -> Unit,
     onClose: () -> Unit
 ) {
     Column(
@@ -921,7 +916,7 @@ fun SettingsSheetContent(
 
         Spacer(modifier = Modifier.height(20.dp))
 
-        // Exclude Alpha
+        // Stable Only Toggle
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
@@ -929,45 +924,19 @@ fun SettingsSheetContent(
         ) {
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = "Exclude Alpha Releases",
+                    text = "Strict Stable Releases Only",
                     style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Medium)
                 )
                 Text(
-                    text = "Ignore unstable alpha versions from APKMirror",
+                    text = "Blocks all Alpha, Beta, RC, Preview, Canary, and Dev builds",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
             Switch(
-                checked = ignoreAlpha,
-                onCheckedChange = onIgnoreAlphaChange,
-                modifier = Modifier.testTag("switch_ignore_alpha")
-            )
-        }
-
-        HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp))
-
-        // Exclude Beta
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = "Exclude Beta Releases",
-                    style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Medium)
-                )
-                Text(
-                    text = "Only notify about stable production updates",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-            Switch(
-                checked = ignoreBeta,
-                onCheckedChange = onIgnoreBetaChange,
-                modifier = Modifier.testTag("switch_ignore_beta")
+                checked = onlyStable,
+                onCheckedChange = onOnlyStableChange,
+                modifier = Modifier.testTag("switch_only_stable")
             )
         }
 

@@ -76,17 +76,17 @@ class AppUpdateRepository(
 
     fun scanForUpdates(
         appsToCheck: List<InstalledApp>,
-        ignoreAlpha: Boolean = true,
-        ignoreBeta: Boolean = true
+        onlyStable: Boolean = true
     ): Flow<ScanStatus> = flow {
         if (appsToCheck.isEmpty()) {
             emit(ScanStatus.Success(emptyList(), emptyList()))
             return@flow
         }
 
-        val exclude = buildList {
-            if (ignoreAlpha) add("alpha")
-            if (ignoreBeta) add("beta")
+        val exclude = if (onlyStable) {
+            listOf("alpha", "beta", "pre-release", "dev")
+        } else {
+            emptyList()
         }
 
         val allUpdates = mutableListOf<AppUpdateInfo>()
@@ -113,7 +113,7 @@ class AppUpdateRepository(
                     )
                 )
 
-                val updatesFromBatch = parseUpdates(response.data, batch)
+                val updatesFromBatch = parseUpdates(response.data, batch, onlyStable = onlyStable)
                 allUpdates.addAll(updatesFromBatch)
             } catch (e: Exception) {
                 Log.e("AppUpdateRepo", "Error querying APKMirror batch: ${e.message}")
@@ -134,7 +134,8 @@ class AppUpdateRepository(
 
     private fun parseUpdates(
         apiDataList: List<AppExistsResponseData>,
-        installedBatch: List<InstalledApp>
+        installedBatch: List<InstalledApp>,
+        onlyStable: Boolean = true
     ): List<AppUpdateInfo> {
         val appMap = installedBatch.associateBy { it.packageName }
 
@@ -142,10 +143,22 @@ class AppUpdateRepository(
             .filter { it.exists == true }
             .mapNotNull { data ->
                 val installed = appMap[data.pname] ?: return@mapNotNull null
+
+                val releaseVersion = data.release?.version.orEmpty()
+                val releaseLink = data.release?.link.orEmpty()
+
+                if (onlyStable && isNonStableVersion(releaseVersion, releaseLink)) {
+                    return@mapNotNull null
+                }
+
                 val bestApk = data.apks
                     .asSequence()
                     .filter { filterArch(it) }
                     .filter { filterMinApi(it) }
+                    .filter { apk ->
+                        if (!onlyStable) true
+                        else !isNonStableVersion(apk.description.orEmpty(), apk.link)
+                    }
                     .filter { it.versionCode > installed.versionCode }
                     .maxByOrNull { it.versionCode }
 
@@ -170,6 +183,18 @@ class AppUpdateRepository(
                     null
                 }
             }
+    }
+
+    private fun isNonStableVersion(vararg texts: String): Boolean {
+        val nonStableKeywords = listOf(
+            "alpha", "beta", "pre-release", "prerelease", "preview",
+            " rc", "-rc", ".rc", "rc0", "rc1", "rc2", "rc3", "rc4", "rc5",
+            "canary", "dev", "nightly", "snapshot", "experimental"
+        )
+        return texts.any { text ->
+            val lower = text.lowercase()
+            nonStableKeywords.any { keyword -> lower.contains(keyword) }
+        }
     }
 
     private fun filterArch(apk: AppExistsApk): Boolean {

@@ -50,11 +50,8 @@ class ApkUpdaterViewModel(application: Application) : AndroidViewModel(applicati
     private val _includeSystemApps = MutableStateFlow(false)
     val includeSystemApps: StateFlow<Boolean> = _includeSystemApps.asStateFlow()
 
-    private val _ignoreAlpha = MutableStateFlow(true)
-    val ignoreAlpha: StateFlow<Boolean> = _ignoreAlpha.asStateFlow()
-
-    private val _ignoreBeta = MutableStateFlow(true)
-    val ignoreBeta: StateFlow<Boolean> = _ignoreBeta.asStateFlow()
+    private val _onlyStable = MutableStateFlow(true)
+    val onlyStable: StateFlow<Boolean> = _onlyStable.asStateFlow()
 
     private val _lastScanTime = MutableStateFlow<Long?>(null)
     val lastScanTime: StateFlow<Long?> = _lastScanTime.asStateFlow()
@@ -89,8 +86,7 @@ class ApkUpdaterViewModel(application: Application) : AndroidViewModel(applicati
 
             repository.scanForUpdates(
                 appsToCheck = appsToCheck,
-                ignoreAlpha = _ignoreAlpha.value,
-                ignoreBeta = _ignoreBeta.value
+                onlyStable = _onlyStable.value
             ).collect { status ->
                 _scanStatus.value = status
                 if (status is ScanStatus.Success) {
@@ -117,11 +113,8 @@ class ApkUpdaterViewModel(application: Application) : AndroidViewModel(applicati
         scanForUpdates()
     }
 
-    fun setIgnoreAlpha(ignore: Boolean) {
-        _ignoreAlpha.value = ignore
-    }
-
-    fun setIgnoreBeta(ignore: Boolean) {
-        _ignoreBeta.value = ignore
+    fun setOnlyStable(onlyStable: Boolean) {
+        _onlyStable.value = onlyStable
+        scanForUpdates()
     }
 }
