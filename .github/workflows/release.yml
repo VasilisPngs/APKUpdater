@@ -34,8 +34,8 @@ jobs:
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
 
-      - name: Build and lint
-        run: ./gradlew lint assembleDebug --no-daemon
+      - name: Lint
+        run: ./gradlew lint --no-daemon
 
       - name: Check release signing configuration
         id: release-check
