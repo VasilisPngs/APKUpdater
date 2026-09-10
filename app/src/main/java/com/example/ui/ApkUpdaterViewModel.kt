@@ -14,18 +14,6 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
-data class UiState(
-    val scanStatus: ScanStatus = ScanStatus.Idle,
-    val installedApps: List<InstalledApp> = emptyList(),
-    val updates: List<AppUpdateInfo> = emptyList(),
-    val selectedFilter: AppFilter = AppFilter.UPDATES_ONLY,
-    val searchQuery: String = "",
-    val includeSystemApps: Boolean = false,
-    val ignoreAlpha: Boolean = true,
-    val ignoreBeta: Boolean = true,
-    val lastScanTime: Long? = null
-)
-
 class ApkUpdaterViewModel(application: Application) : AndroidViewModel(application) {
     private val repository = AppUpdateRepository(application.applicationContext)
     private val _scanStatus = MutableStateFlow<ScanStatus>(ScanStatus.Idle)
@@ -65,7 +53,11 @@ class ApkUpdaterViewModel(application: Application) : AndroidViewModel(applicati
             val allApps = _installedApps.value.ifEmpty {
                 repository.getInstalledApps().also { _installedApps.value = it }
             }
-            val appsToCheck = if (_includeSystemApps.value) allApps else allApps.filterNot(InstalledApp::isSystemApp)
+            val appsToCheck = if (_includeSystemApps.value) {
+                allApps
+            } else {
+                allApps.filterNot(InstalledApp::isSystemApp)
+            }
 
             repository.scanForUpdates(appsToCheck, _onlyStable.value).collect { status ->
                 _scanStatus.value = status
