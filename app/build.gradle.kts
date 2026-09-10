@@ -11,10 +11,10 @@ plugins {
 
 android {
   namespace = "com.example"
-  compileSdk { version = release(36) { minorApiLevel = 1 } }
+  compileSdk = 36
 
   defaultConfig {
-    applicationId = "com.android.apkupdater"
+    applicationId = "com.aistudio.apkupdater"
     minSdk = 24
     targetSdk = 36
     versionCode = 1
@@ -24,16 +24,31 @@ android {
   }
 
   val releaseKeystore = rootProject.file("release.keystore")
-  val hasKeystore = releaseKeystore.exists() && !System.getenv("ANDROID_KEYSTORE_PASSWORD").isNullOrEmpty()
+  val hasReleaseKeystore = releaseKeystore.exists() && !System.getenv("ANDROID_KEYSTORE_PASSWORD").isNullOrEmpty()
+  val debugKeystore = rootProject.file("debug.keystore")
 
   signingConfigs {
-    if (hasKeystore) {
+    if (hasReleaseKeystore) {
       create("release") {
         storeFile = releaseKeystore
         storePassword = System.getenv("ANDROID_KEYSTORE_PASSWORD")
         keyAlias = System.getenv("ANDROID_KEY_ALIAS") ?: "release"
         keyPassword = System.getenv("ANDROID_KEYSTORE_PASSWORD")
+        enableV1Signing = true
+        enableV2Signing = true
+        enableV3Signing = true
       }
+    }
+    getByName("debug") {
+      if (debugKeystore.exists()) {
+        storeFile = debugKeystore
+        storePassword = "android"
+        keyAlias = "androiddebugkey"
+        keyPassword = "android"
+      }
+      enableV1Signing = true
+      enableV2Signing = true
+      enableV3Signing = true
     }
   }
 
@@ -42,8 +57,10 @@ android {
       isCrunchPngs = false
       isMinifyEnabled = false
       proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
-      if (hasKeystore) {
-        signingConfig = signingConfigs.getByName("release")
+      signingConfig = if (hasReleaseKeystore) {
+        signingConfigs.getByName("release")
+      } else {
+        signingConfigs.getByName("debug")
       }
     }
     debug { }

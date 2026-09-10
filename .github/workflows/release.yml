@@ -33,12 +33,19 @@ jobs:
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
 
-      - name: Decrypt Keystore
+      - name: Prepare Keystore
         env:
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
         run: |
           if [ -f release.keystore.enc ] && [ -n "$ANDROID_KEYSTORE_PASSWORD" ]; then
             openssl enc -d -aes-256-cbc -pbkdf2 -in release.keystore.enc -out release.keystore -k "$ANDROID_KEYSTORE_PASSWORD"
+          fi
+          if [ ! -f release.keystore ]; then
+            if [ -f debug.keystore.base64 ]; then
+              base64 -d debug.keystore.base64 > debug.keystore
+            elif [ ! -f debug.keystore ]; then
+              keytool -genkeypair -v -keystore debug.keystore -alias androiddebugkey -keyalg RSA -keysize 2048 -validity 10000 -storepass android -keypass android -dname "CN=Android Debug,O=Android,C=US"
+            fi
           fi
 
       - name: Build APK
@@ -53,7 +60,13 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG_NAME: v1.0.0
         run: |
-          APK_FILE=$(find app/build/outputs/apk -name "*.apk" | head -n 1)
+          APK_FILE=$(find app/build/outputs/apk/release -name "app-release.apk" | head -n 1)
+          if [ -z "$APK_FILE" ]; then
+            APK_FILE=$(find app/build/outputs/apk -name "*.apk" -not -name "*unsigned*" | head -n 1)
+          fi
+          if [ -z "$APK_FILE" ]; then
+            APK_FILE=$(find app/build/outputs/apk -name "*.apk" | head -n 1)
+          fi
           if [ -z "$APK_FILE" ]; then
             echo "Error: No APK file generated!"
             exit 1
