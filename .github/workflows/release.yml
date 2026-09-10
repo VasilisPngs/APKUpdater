@@ -34,6 +34,33 @@ jobs:
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
 
+      - name: Fix Compose lint issues
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path("app/src/main/java/com/example/ui/ApkUpdaterScreen.kt")
+          source = path.read_text()
+          source = source.replace(
+              "import androidx.compose.material.icons.filled.ArrowForward",
+              "import androidx.compose.material.icons.automirrored.filled.ArrowForward",
+          )
+          source = source.replace(
+              "Icons.Default.ArrowForward",
+              "Icons.AutoMirrored.Filled.ArrowForward",
+          )
+          source = source.replace(
+              "import androidx.compose.ui.platform.LocalContext",
+              "import androidx.compose.ui.platform.LocalContext\nimport androidx.compose.ui.platform.LocalLocale",
+          )
+          source = source.replace(
+              "SimpleDateFormat(\"HH:mm\", Locale.getDefault()).format(Date(lastScanTime))",
+              "SimpleDateFormat(\"HH:mm\", LocalLocale.current.platformLocale).format(Date(lastScanTime))",
+          )
+          source = source.replace("import java.util.Locale\n", "")
+          path.write_text(source)
+          PY
+
       - name: Lint release
         run: ./gradlew :app:lintRelease --no-daemon
 
