@@ -2,7 +2,6 @@ package com.example.data.repository
 
 import android.content.Context
 import android.content.pm.ApplicationInfo
-import android.content.pm.PackageInfo
 import android.content.pm.PackageManager
 import android.os.Build
 import com.example.data.api.ApkMirrorService
@@ -42,7 +41,8 @@ class AppUpdateRepository(
         packages.mapNotNull { pkg ->
             runCatching {
                 val appInfo = pkg.applicationInfo ?: return@mapNotNull null
-                val isSystem = appInfo.isSystemApp
+                val isSystem = (appInfo.flags and ApplicationInfo.FLAG_SYSTEM) != 0 ||
+                    (appInfo.flags and ApplicationInfo.FLAG_UPDATED_SYSTEM_APP) != 0
                 if (!includeSystem && isSystem) return@mapNotNull null
                 InstalledApp(
                     packageName = pkg.packageName,
