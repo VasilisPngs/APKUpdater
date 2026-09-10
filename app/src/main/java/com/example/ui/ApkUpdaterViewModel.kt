@@ -1,13 +1,13 @@
-package com.example.ui
+package com.android.apkupdater.ui
 
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
-import com.example.data.model.AppFilter
-import com.example.data.model.AppUpdateInfo
-import com.example.data.model.InstalledApp
-import com.example.data.repository.AppUpdateRepository
-import com.example.data.repository.ScanStatus
+import com.android.apkupdater.data.model.AppFilter
+import com.android.apkupdater.data.model.AppUpdateInfo
+import com.android.apkupdater.data.model.InstalledApp
+import com.android.apkupdater.data.repository.AppUpdateRepository
+import com.android.apkupdater.data.repository.ScanStatus
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
