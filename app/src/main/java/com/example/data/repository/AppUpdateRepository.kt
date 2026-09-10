@@ -29,10 +29,11 @@ class AppUpdateRepository(
     private val service: ApkMirrorService = ApkMirrorService.create()
 ) {
     private val packageManager = context.packageManager
+    private val deviceAbis = Build.SUPPORTED_ABIS.map(String::lowercase).toSet()
     private val deviceArch = when {
-        Build.SUPPORTED_ABIS.any { it == "x86" || it == "x86_64" } -> "x86"
-        Build.SUPPORTED_ABIS.any { it == "armeabi-v7a" } -> "arm"
-        Build.SUPPORTED_ABIS.any { it == "arm64-v8a" } -> "arm"
+        deviceAbis.any { it == "x86" || it == "x86_64" } -> "x86"
+        deviceAbis.any { it == "armeabi-v7a" } -> "arm"
+        deviceAbis.any { it == "arm64-v8a" } -> "arm"
         else -> "arm"
     }
 
@@ -118,8 +119,9 @@ class AppUpdateRepository(
             .mapNotNull { data ->
                 val installed = appMap[data.pname] ?: return@mapNotNull null
                 val release = data.release ?: return@mapNotNull null
+                val releaseVersion = release.version ?: return@mapNotNull null
 
-                if (onlyStable && isNonStableVersion(release.version, release.link.orEmpty(), release.whatsNew.orEmpty())) {
+                if (onlyStable && isNonStableVersion(releaseVersion, release.link.orEmpty(), release.whatsNew.orEmpty())) {
                     return@mapNotNull null
                 }
 
@@ -146,7 +148,7 @@ class AppUpdateRepository(
                     appName = installed.appName,
                     currentVersionName = installed.versionName,
                     currentVersionCode = installed.versionCode,
-                    newVersionName = release.version,
+                    newVersionName = releaseVersion,
                     newVersionCode = bestApk.versionCode,
                     publishDate = bestApk.publishDate ?: release.publishDate,
                     whatsNew = release.whatsNew,
@@ -160,7 +162,7 @@ class AppUpdateRepository(
 
     private fun filterSignature(apk: AppExistsApk, installedSignatureSha1: String): Boolean {
         val signatures = apk.signaturesSha1.orEmpty()
-        return signatures.isEmpty() || installedSignatureSha1.isEmpty() || signatures.any {
+        return signatures.isEmpty() || signatures.any {
             it.equals(installedSignatureSha1, ignoreCase = true)
         }
     }
@@ -169,7 +171,7 @@ class AppUpdateRepository(
         if (apk.arches.isEmpty()) return true
         val arches = apk.arches.map(String::lowercase)
         if (arches.any { it == "universal" || it == "noarch" }) return true
-        return arches.any { it == deviceArch }
+        return arches.any { it in deviceAbis || it.contains(deviceArch) }
     }
 
     private fun filterMinApi(apk: AppExistsApk): Boolean = apk.minapi
