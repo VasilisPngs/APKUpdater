@@ -1,15 +1,15 @@
-package com.example.data.repository
+package com.android.apkupdater.data.repository
 
 import android.content.Context
 import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
 import android.os.Build
-import com.example.data.api.ApkMirrorService
-import com.example.data.model.AppExistsApk
-import com.example.data.model.AppExistsRequest
-import com.example.data.model.AppExistsResponseData
-import com.example.data.model.AppUpdateInfo
-import com.example.data.model.InstalledApp
+import com.android.apkupdater.data.api.ApkMirrorService
+import com.android.apkupdater.data.model.AppExistsApk
+import com.android.apkupdater.data.model.AppExistsRequest
+import com.android.apkupdater.data.model.AppExistsResponseData
+import com.android.apkupdater.data.model.AppUpdateInfo
+import com.android.apkupdater.data.model.InstalledApp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
