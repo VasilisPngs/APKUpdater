@@ -1,13 +1,13 @@
-package com.apkupdater.android
+package com.android.apkupdater
 
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
-import com.example.ui.ApkUpdaterScreen
-import com.example.ui.ApkUpdaterViewModel
-import com.example.ui.theme.ApkUpdaterTheme
+import com.android.apkupdater.ui.ApkUpdaterScreen
+import com.android.apkupdater.ui.ApkUpdaterViewModel
+import com.android.apkupdater.ui.theme.ApkUpdaterTheme
 
 class MainActivity : ComponentActivity() {
     private val viewModel: ApkUpdaterViewModel by viewModels()
