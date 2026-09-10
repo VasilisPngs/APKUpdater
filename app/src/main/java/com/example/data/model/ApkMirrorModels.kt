@@ -1,21 +1,17 @@
 package com.example.data.model
 
 import com.squareup.moshi.Json
-import com.squareup.moshi.JsonClass
 
-@JsonClass(generateAdapter = true)
 data class AppExistsRequest(
     @Json(name = "pnames") val pnames: List<String>,
     @Json(name = "exclude") val exclude: List<String> = listOf("alpha", "beta")
 )
 
-@JsonClass(generateAdapter = true)
 data class AppExistsResponse(
     @Json(name = "data") val data: List<AppExistsResponseData> = emptyList(),
     @Json(name = "status") val status: Int? = null
 )
 
-@JsonClass(generateAdapter = true)
 data class AppExistsResponseData(
     @Json(name = "pname") val pname: String = "",
     @Json(name = "exists") val exists: Boolean? = null,
@@ -25,20 +21,17 @@ data class AppExistsResponseData(
     @Json(name = "apks") val apks: List<AppExistsApk> = emptyList()
 )
 
-@JsonClass(generateAdapter = true)
 data class AppExistsDeveloper(
     @Json(name = "name") val name: String? = null,
     @Json(name = "link") val link: String? = null
 )
 
-@JsonClass(generateAdapter = true)
 data class AppExistsApp(
     @Json(name = "name") val name: String? = null,
     @Json(name = "description") val description: String? = null,
     @Json(name = "link") val link: String? = null
 )
 
-@JsonClass(generateAdapter = true)
 data class AppExistsRelease(
     @Json(name = "version") val version: String? = null,
     @Json(name = "publish_date") val publishDate: String? = null,
@@ -46,7 +39,6 @@ data class AppExistsRelease(
     @Json(name = "link") val link: String? = null
 )
 
-@JsonClass(generateAdapter = true)
 data class AppExistsApk(
     @Json(name = "version_code") val versionCode: Long = 0,
     @Json(name = "link") val link: String = "",
