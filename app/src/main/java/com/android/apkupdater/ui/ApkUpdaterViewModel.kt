@@ -23,7 +23,6 @@ class ApkUpdaterViewModel(application: Application) : AndroidViewModel(applicati
     private val _searchQuery = MutableStateFlow("")
     private val _includeSystemApps = MutableStateFlow(false)
     private val _onlyStable = MutableStateFlow(true)
-    private val _lastScanTime = MutableStateFlow<Long?>(null)
     private var scanJob: Job? = null
 
     val scanStatus: StateFlow<ScanStatus> = _scanStatus.asStateFlow()
@@ -33,7 +32,6 @@ class ApkUpdaterViewModel(application: Application) : AndroidViewModel(applicati
     val searchQuery: StateFlow<String> = _searchQuery.asStateFlow()
     val includeSystemApps: StateFlow<Boolean> = _includeSystemApps.asStateFlow()
     val onlyStable: StateFlow<Boolean> = _onlyStable.asStateFlow()
-    val lastScanTime: StateFlow<Long?> = _lastScanTime.asStateFlow()
 
     init {
         loadInstalledApps(autoScan = true)
@@ -62,13 +60,8 @@ class ApkUpdaterViewModel(application: Application) : AndroidViewModel(applicati
             repository.scanForUpdates(appsToCheck, _onlyStable.value).collect { status ->
                 _scanStatus.value = status
                 when (status) {
-                    is ScanStatus.Success -> {
-                        _updates.value = status.updates
-                        _lastScanTime.value = System.currentTimeMillis()
-                    }
-                    is ScanStatus.Error -> {
-                        _updates.value = status.partialUpdates
-                    }
+                    is ScanStatus.Success -> _updates.value = status.updates
+                    is ScanStatus.Error -> _updates.value = status.partialUpdates
                     else -> Unit
                 }
             }

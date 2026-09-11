@@ -20,7 +20,7 @@ import java.security.MessageDigest
 sealed interface ScanStatus {
     data object Idle : ScanStatus
     data class Scanning(val processed: Int, val total: Int, val currentBatch: String) : ScanStatus
-    data class Success(val updates: List<AppUpdateInfo>, val allApps: List<InstalledApp>) : ScanStatus
+    data class Success(val updates: List<AppUpdateInfo>) : ScanStatus
     data class Error(val message: String, val partialUpdates: List<AppUpdateInfo>) : ScanStatus
 }
 
@@ -29,11 +29,11 @@ class AppUpdateRepository(
     private val service: ApkMirrorService = ApkMirrorService.create()
 ) {
     private val packageManager = context.packageManager
+    private val isAndroidTv = packageManager.hasSystemFeature(PackageManager.FEATURE_LEANBACK)
     private val deviceAbis = Build.SUPPORTED_ABIS.map(String::lowercase).toSet()
     private val deviceArch = when {
         deviceAbis.any { it == "x86" || it == "x86_64" } -> "x86"
-        deviceAbis.any { it == "armeabi-v7a" } -> "arm"
-        deviceAbis.any { it == "arm64-v8a" } -> "arm"
+        deviceAbis.any { it == "armeabi-v7a" || it == "arm64-v8a" } -> "arm"
         else -> "arm"
     }
 
@@ -54,7 +54,7 @@ class AppUpdateRepository(
                     ?.let { signer ->
                         MessageDigest.getInstance("SHA-1")
                             .digest(signer.toByteArray())
-                            .joinToString("") { byte -> "%02x".format(byte) }
+                            .joinToString("") { byte -> "%02x".format(byte.toInt() and 0xff) }
                     }
                     .orEmpty()
 
@@ -64,9 +64,7 @@ class AppUpdateRepository(
                     versionName = pkg.versionName ?: "Unknown",
                     versionCode = pkg.longVersionCode,
                     signatureSha1 = signatureSha1,
-                    isSystemApp = isSystem,
-                    firstInstallTime = pkg.firstInstallTime,
-                    lastUpdateTime = pkg.lastUpdateTime
+                    isSystemApp = isSystem
                 )
             }.getOrNull()
         }.sortedWith(compareBy({ it.isSystemApp }, { it.appName.lowercase() }))
@@ -77,7 +75,7 @@ class AppUpdateRepository(
         onlyStable: Boolean = true
     ): Flow<ScanStatus> = flow {
         if (appsToCheck.isEmpty()) {
-            emit(ScanStatus.Success(emptyList(), emptyList()))
+            emit(ScanStatus.Success(emptyList()))
             return@flow
         }
 
@@ -92,8 +90,10 @@ class AppUpdateRepository(
         for (batch in batches) {
             emit(ScanStatus.Scanning(processed, appsToCheck.size, batch.first().appName))
             try {
-                val response = service.appExists(AppExistsRequest(batch.map(InstalledApp::packageName), exclude))
-                updates += parseUpdates(response.data, batch, onlyStable)
+                val response = service.appExists(
+                    AppExistsRequest(batch.map(InstalledApp::packageName), exclude)
+                )
+                updates += parseUpdates(response.data, batch)
             } catch (_: Exception) {
                 failedBatches++
             }
@@ -104,14 +104,13 @@ class AppUpdateRepository(
         when {
             failedBatches == batches.size -> emit(ScanStatus.Error("Unable to reach APKMirror.", updates))
             failedBatches > 0 -> emit(ScanStatus.Error("Some applications could not be checked.", updates))
-            else -> emit(ScanStatus.Success(updates, appsToCheck))
+            else -> emit(ScanStatus.Success(updates))
         }
     }.flowOn(Dispatchers.IO)
 
     private fun parseUpdates(
         apiDataList: List<AppExistsResponseData>,
-        installedBatch: List<InstalledApp>,
-        onlyStable: Boolean
+        installedBatch: List<InstalledApp>
     ): List<AppUpdateInfo> {
         val appMap = installedBatch.associateBy(InstalledApp::packageName)
 
@@ -121,22 +120,12 @@ class AppUpdateRepository(
                 val installed = appMap[data.pname] ?: return@mapNotNull null
                 val release = data.release ?: return@mapNotNull null
 
-                if (onlyStable && isNonStableVersion(
-                        release.version.orEmpty(),
-                        release.link.orEmpty(),
-                        release.whatsNew.orEmpty()
-                    )
-                ) {
-                    return@mapNotNull null
-                }
-
                 val bestApk = data.apks.asSequence()
                     .filter { apk -> filterSignature(apk, installed.signatureSha1) }
                     .filter(::filterArch)
                     .filter(::filterMinApi)
-                    .filter { apk ->
-                        !onlyStable || !isNonStableVersion(apk.description.orEmpty(), apk.link)
-                    }
+                    .filter(::filterAndroidTv)
+                    .filter(::filterWearOs)
                     .filter { apk -> apk.versionCode > installed.versionCode }
                     .maxByOrNull(AppExistsApk::versionCode)
                     ?: return@mapNotNull null
@@ -152,14 +141,10 @@ class AppUpdateRepository(
                     packageName = installed.packageName,
                     appName = installed.appName,
                     currentVersionName = installed.versionName,
-                    currentVersionCode = installed.versionCode,
                     newVersionName = release.version.orEmpty(),
                     newVersionCode = bestApk.versionCode,
-                    publishDate = bestApk.publishDate ?: release.publishDate,
                     whatsNew = release.whatsNew,
-                    apkMirrorUrl = url,
-                    architectures = bestApk.arches,
-                    isSystemApp = installed.isSystemApp
+                    apkMirrorUrl = url
                 )
             }
             .toList()
@@ -179,13 +164,20 @@ class AppUpdateRepository(
         return arches.any { it in deviceAbis || it.contains(deviceArch) }
     }
 
+    private fun filterAndroidTv(apk: AppExistsApk): Boolean {
+        val capabilities = apk.capabilities.orEmpty()
+        return if (isAndroidTv) {
+            capabilities.contains("leanback_standalone") || capabilities.contains("leanback")
+        } else {
+            !capabilities.contains("leanback_standalone")
+        }
+    }
+
+    private fun filterWearOs(apk: AppExistsApk): Boolean =
+        !apk.capabilities.orEmpty().contains("wear_standalone")
+
     private fun filterMinApi(apk: AppExistsApk): Boolean = apk.minapi
         ?.toIntOrNull()
         ?.let { it <= Build.VERSION.SDK_INT }
         ?: true
-
-    private fun isNonStableVersion(vararg texts: String): Boolean {
-        val pattern = Regex("(^|[^a-z])(alpha|beta|pre[- ]?release|preview|rc|canary|dev|nightly|snapshot|experimental)([^a-z]|$)")
-        return texts.any { pattern.containsMatchIn(it.lowercase()) }
-    }
 }
