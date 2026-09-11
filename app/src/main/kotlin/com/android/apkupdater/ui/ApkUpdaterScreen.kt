@@ -24,6 +24,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.ArrowForward
 import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.Home
@@ -35,8 +36,8 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.ListItem
 import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
@@ -183,7 +184,6 @@ private fun HomeContent(
         ScanStatusSection(
             status = status,
             updatesCount = updates.size,
-            appsCount = appsCount,
             onScanClick = onScanClick
         )
 
@@ -261,7 +261,6 @@ private fun SearchContent(
 private fun ScanStatusSection(
     status: ScanStatus,
     updatesCount: Int,
-    appsCount: Int,
     onScanClick: () -> Unit
 ) {
     when (status) {
@@ -283,7 +282,6 @@ private fun ScanStatusSection(
                 headlineContent = {
                     Text(if (updatesCount > 0) "$updatesCount updates available" else "All apps are up to date")
                 },
-                supportingContent = { Text("Checked $appsCount installed apps") },
                 trailingContent = { TextButton(onClick = onScanClick) { Text("Check again") } }
             )
         }
@@ -317,15 +315,14 @@ private fun AppListItem(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically
+            verticalAlignment = Alignment.Top
         ) {
             AppIconImage(app.packageName, Modifier.size(56.dp))
             Spacer(Modifier.width(16.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.Top,
-                    horizontalArrangement = Arrangement.SpaceBetween
+                    verticalAlignment = Alignment.Top
                 ) {
                     Text(
                         text = app.appName,
@@ -334,7 +331,7 @@ private fun AppListItem(
                         overflow = TextOverflow.Ellipsis,
                         style = MaterialTheme.typography.titleMedium
                     )
-                    Spacer(Modifier.width(12.dp))
+                    Spacer(Modifier.width(16.dp))
                     Text(
                         text = if (app.isSystemApp) "System" else "User",
                         style = MaterialTheme.typography.labelMedium
@@ -345,25 +342,41 @@ private fun AppListItem(
 
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.Bottom
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        if (update != null) {
+                    if (update != null) {
+                        Row(
+                            modifier = Modifier.weight(1f),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
                             Text(
-                                text = "Current v${app.versionName} (${app.versionCode})",
-                                style = MaterialTheme.typography.bodyMedium
+                                text = "v${app.versionName} (${app.versionCode})",
+                                style = MaterialTheme.typography.bodyMedium,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
                             )
-                            Spacer(Modifier.size(2.dp))
-                            Text(
-                                text = "Latest v${update.newVersionName} (${update.newVersionCode})",
-                                style = MaterialTheme.typography.bodyMedium
+                            Icon(
+                                imageVector = Icons.Rounded.ArrowForward,
+                                contentDescription = "Update available",
+                                modifier = Modifier
+                                    .padding(horizontal = 8.dp)
+                                    .size(20.dp)
                             )
-                        } else {
                             Text(
-                                text = "Version v${app.versionName} (${app.versionCode})",
-                                style = MaterialTheme.typography.bodyMedium
+                                text = "v${update.newVersionName} (${update.newVersionCode})",
+                                style = MaterialTheme.typography.bodyMedium,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
                             )
                         }
+                    } else {
+                        Text(
+                            text = "v${app.versionName} (${app.versionCode})",
+                            modifier = Modifier.weight(1f),
+                            style = MaterialTheme.typography.bodyMedium,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
                     }
 
                     Spacer(Modifier.width(12.dp))
@@ -372,7 +385,7 @@ private fun AppListItem(
                         onClick = onOpenApkMirror,
                         shape = MaterialTheme.shapes.extraLarge
                     ) {
-                        Text("Update")
+                        Text(if (update != null) "Update" else "APKMirror")
                     }
                 }
             }
