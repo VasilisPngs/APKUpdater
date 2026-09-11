@@ -98,7 +98,13 @@ fun ApkUpdaterScreen(
                 app.appName.contains(searchQuery, ignoreCase = true) ||
                 app.packageName.contains(searchQuery, ignoreCase = true)
         }
-    val appsWithUpdates = visibleApps.filter { updateMap.containsKey(it.packageName) }
+        .sortedBy { it.appName.lowercase() }
+    val appsWithUpdates = visibleApps
+        .filter { updateMap.containsKey(it.packageName) }
+        .sortedWith(
+            compareByDescending<InstalledApp> { updateMap[it.packageName]?.newVersionCode ?: Long.MIN_VALUE }
+                .thenBy { it.appName.lowercase() }
+        )
 
     Scaffold(
         modifier = modifier.fillMaxSize(),
