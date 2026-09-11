@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -31,15 +32,15 @@ import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
+import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.FilterChip
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.ListItem
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
@@ -48,7 +49,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -60,7 +61,6 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.android.apkupdater.data.model.AppFilter
 import com.android.apkupdater.data.model.AppUpdateInfo
 import com.android.apkupdater.data.model.InstalledApp
@@ -106,8 +106,9 @@ fun ApkUpdaterScreen(
 
     Scaffold(
         modifier = modifier.fillMaxSize(),
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
-            TopAppBar(
+            CenterAlignedTopAppBar(
                 title = { Text("APKUpdater") },
                 actions = {
                     IconButton(
@@ -199,7 +200,7 @@ fun ApkUpdaterScreen(
                 } else {
                     LazyColumn(
                         modifier = Modifier.fillMaxSize(),
-                        contentPadding = PaddingValues(16.dp),
+                        contentPadding = PaddingValues(start = 16.dp, top = 8.dp, end = 16.dp, bottom = 16.dp),
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         items(filteredUpdates, key = { it.packageName }) { update ->
@@ -215,7 +216,7 @@ fun ApkUpdaterScreen(
             } else {
                 LazyColumn(
                     modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 16.dp),
+                    contentPadding = PaddingValues(start = 16.dp, top = 8.dp, end = 16.dp, bottom = 16.dp),
                     verticalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
                     items(filteredApps, key = { it.packageName }) { app ->
@@ -270,10 +271,7 @@ private fun ScanStatusSection(
         is ScanStatus.Success -> {
             ListItem(
                 leadingContent = {
-                    Icon(
-                        if (updatesCount > 0) Icons.Default.CheckCircle else Icons.Default.CheckCircle,
-                        contentDescription = null
-                    )
+                    Icon(Icons.Default.CheckCircle, contentDescription = null)
                 },
                 headlineContent = {
                     Text(if (updatesCount > 0) "$updatesCount updates available" else "All apps are up to date")
@@ -304,45 +302,23 @@ private fun UpdateListItem(
     update: AppUpdateInfo,
     onOpenApkMirror: () -> Unit
 ) {
-    var showChangelog by remember(update.packageName, update.newVersionCode) { mutableStateOf(false) }
-
     Card(modifier = Modifier.fillMaxWidth()) {
-        Column {
-            ListItem(
-                leadingContent = { AppIconImage(update.packageName, Modifier.size(48.dp)) },
-                headlineContent = {
-                    Text(update.appName, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                },
-                supportingContent = {
-                    Text("v${update.currentVersionName} → v${update.newVersionName}")
-                },
-                trailingContent = {
-                    FilledTonalButton(onClick = onOpenApkMirror) {
-                        Icon(Icons.Default.Search, contentDescription = null)
-                        Spacer(Modifier.width(8.dp))
-                        Text("Open")
-                    }
+        ListItem(
+            leadingContent = { AppIconImage(update.packageName, Modifier.size(48.dp)) },
+            headlineContent = {
+                Text(update.appName, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            },
+            supportingContent = {
+                Text("v${update.currentVersionName} → v${update.newVersionName}")
+            },
+            trailingContent = {
+                FilledTonalButton(onClick = onOpenApkMirror) {
+                    Icon(Icons.Default.Search, contentDescription = null)
+                    Spacer(Modifier.width(8.dp))
+                    Text("Open")
                 }
-            )
-            if (!update.whatsNew.isNullOrBlank()) {
-                HorizontalDivider()
-                ListItem(
-                    headlineContent = { Text("Changelog") },
-                    supportingContent = {
-                        Text(
-                            if (showChangelog) update.whatsNew.orEmpty() else "View release notes",
-                            maxLines = if (showChangelog) 20 else 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                    },
-                    trailingContent = {
-                        TextButton(onClick = { showChangelog = !showChangelog }) {
-                            Text(if (showChangelog) "Hide" else "Show")
-                        }
-                    }
-                )
             }
-        }
+        )
     }
 }
 
@@ -412,7 +388,7 @@ private fun SettingsContent(
             headlineContent = { Text("Settings") },
             supportingContent = { Text("APKMirror update checks") }
         )
-        HorizontalDivider()
+        androidx.compose.material3.HorizontalDivider()
         ListItem(
             headlineContent = { Text("Stable releases only") },
             supportingContent = { Text("Exclude alpha and beta releases") },
