@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
 import android.os.Build
+import com.android.apkupdater.data.api.ApkMirrorPageService
 import com.android.apkupdater.data.api.ApkMirrorService
 import com.android.apkupdater.data.model.AppExistsApk
 import com.android.apkupdater.data.model.AppExistsRequest
@@ -11,11 +12,17 @@ import com.android.apkupdater.data.model.AppExistsResponseData
 import com.android.apkupdater.data.model.AppUpdateInfo
 import com.android.apkupdater.data.model.InstalledApp
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.withContext
 import java.security.MessageDigest
+import java.time.format.DateTimeFormatterBuilder
+import java.time.ZoneOffset
+import java.util.Locale
 
 sealed interface ScanStatus {
     data object Idle : ScanStatus
@@ -26,7 +33,8 @@ sealed interface ScanStatus {
 
 class AppUpdateRepository(
     context: Context,
-    private val service: ApkMirrorService = ApkMirrorService.create()
+    private val service: ApkMirrorService = ApkMirrorService.create(),
+    private val pageService: ApkMirrorPageService = ApkMirrorPageService.create()
 ) {
     private val packageManager = context.packageManager
     private val isAndroidTv = packageManager.hasSystemFeature(PackageManager.FEATURE_LEANBACK)
@@ -98,12 +106,41 @@ class AppUpdateRepository(
             emit(ScanStatus.Scanning(processed, appsToCheck.size, batch.last().appName))
         }
 
+        val timestampedUpdates = enrichWithApkMirrorUploadTimes(updates)
+
         when {
-            failedBatches == batches.size -> emit(ScanStatus.Error("Unable to reach APKMirror.", updates))
-            failedBatches > 0 -> emit(ScanStatus.Error("Some applications could not be checked.", updates))
-            else -> emit(ScanStatus.Success(updates))
+            failedBatches == batches.size -> emit(ScanStatus.Error("Unable to reach APKMirror.", timestampedUpdates))
+            failedBatches > 0 -> emit(ScanStatus.Error("Some applications could not be checked.", timestampedUpdates))
+            else -> emit(ScanStatus.Success(timestampedUpdates))
         }
     }.flowOn(Dispatchers.IO)
+
+    private suspend fun enrichWithApkMirrorUploadTimes(
+        updates: List<AppUpdateInfo>
+    ): List<AppUpdateInfo> = coroutineScope {
+        updates.map { update ->
+            async {
+                update.copy(apkMirrorUploadedAt = fetchApkMirrorUploadTime(update.apkMirrorUrl))
+            }
+        }.awaitAll()
+    }
+
+    private suspend fun fetchApkMirrorUploadTime(url: String): Long? = runCatching {
+        val html = pageService.getReleasePage(url).string()
+        val match = Regex(
+            "Uploaded:\\s*([A-Za-z]+\\s+\\d{1,2},\\s+\\d{4}\\s+at\\s+\\d{1,2}:\\d{2}(?:AM|PM)\\s+UTC)"
+        ).find(html)
+        match?.groupValues?.get(1)?.let { value ->
+            runCatching {
+                DateTimeFormatterBuilder()
+                    .appendPattern("MMMM d, uuuu 'at' h:mma 'UTC'")
+                    .toFormatter(Locale.US)
+                    .parse(value, java.time.LocalDateTime::from)
+                    .toInstant(ZoneOffset.UTC)
+                    .toEpochMilli()
+            }.getOrNull()
+        }
+    }.getOrNull()
 
     private fun parseUpdates(
         apiDataList: List<AppExistsResponseData>,
