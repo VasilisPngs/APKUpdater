@@ -313,40 +313,70 @@ private fun AppListItem(
         modifier = Modifier.fillMaxWidth(),
         shape = MaterialTheme.shapes.medium
     ) {
-        ListItem(
-            leadingContent = { AppIconImage(app.packageName, Modifier.size(48.dp)) },
-            headlineContent = {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            AppIconImage(app.packageName, Modifier.size(56.dp))
+            Spacer(Modifier.width(16.dp))
+            Column(modifier = Modifier.weight(1f)) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
+                    verticalAlignment = Alignment.Top,
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
                     Text(
-                        app.appName,
+                        text = app.appName,
                         modifier = Modifier.weight(1f),
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                        style = MaterialTheme.typography.titleMedium
                     )
                     Spacer(Modifier.width(12.dp))
                     Text(
-                        if (app.isSystemApp) "System" else "User",
+                        text = if (app.isSystemApp) "System" else "User",
                         style = MaterialTheme.typography.labelMedium
                     )
                 }
-            },
-            supportingContent = {
-                if (update != null) {
-                    Text("v${app.versionName} (${app.versionCode}) → v${update.newVersionName} (${update.newVersionCode})")
-                } else {
-                    Text("v${app.versionName} (${app.versionCode})")
-                }
-            },
-            trailingContent = {
-                FilledTonalButton(onClick = onOpenApkMirror) {
-                    Text("Update")
+
+                Spacer(Modifier.size(12.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.Bottom
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        if (update != null) {
+                            Text(
+                                text = "Current v${app.versionName} (${app.versionCode})",
+                                style = MaterialTheme.typography.bodyMedium
+                            )
+                            Spacer(Modifier.size(2.dp))
+                            Text(
+                                text = "Latest v${update.newVersionName} (${update.newVersionCode})",
+                                style = MaterialTheme.typography.bodyMedium
+                            )
+                        } else {
+                            Text(
+                                text = "Version v${app.versionName} (${app.versionCode})",
+                                style = MaterialTheme.typography.bodyMedium
+                            )
+                        }
+                    }
+
+                    Spacer(Modifier.width(12.dp))
+
+                    FilledTonalButton(
+                        onClick = onOpenApkMirror,
+                        shape = MaterialTheme.shapes.extraLarge
+                    ) {
+                        Text("Update")
+                    }
                 }
             }
-        )
+        }
     }
 }
 
