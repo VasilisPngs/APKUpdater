@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -299,13 +300,15 @@ private fun AppListItem(
     onOpenApkMirror: () -> Unit
 ) {
     OutlinedCard(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(min = 180.dp),
         shape = MaterialTheme.shapes.large
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(20.dp),
+                .padding(horizontal = 24.dp, vertical = 28.dp),
             verticalAlignment = Alignment.Top
         ) {
             AppIconImage(app.packageName, Modifier.size(64.dp))
@@ -329,7 +332,7 @@ private fun AppListItem(
                     )
                 }
 
-                Spacer(Modifier.size(16.dp))
+                Spacer(Modifier.size(20.dp))
 
                 Row(
                     modifier = Modifier.fillMaxWidth(),
