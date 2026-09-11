@@ -17,7 +17,5 @@ data class AppUpdateInfo(
     val currentVersionCode: Long,
     val newVersionName: String,
     val newVersionCode: Long,
-    val whatsNew: String?,
-    val apkMirrorUrl: String,
-    val apkMirrorUploadedAt: Long? = null
+    val apkMirrorUrl: String
 )

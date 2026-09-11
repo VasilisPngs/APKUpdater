@@ -55,6 +55,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
@@ -71,7 +72,9 @@ import com.android.apkupdater.data.model.AppUpdateInfo
 import com.android.apkupdater.data.model.InstalledApp
 import com.android.apkupdater.data.model.InstallState
 import com.android.apkupdater.data.repository.ScanStatus
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 private enum class AppTab(val labelRes: Int) {
     Home(R.string.home),
@@ -130,13 +133,7 @@ fun ApkUpdaterScreen(
             .sortedBy { it.appName.lowercase() }
     }
     val appsWithUpdates = remember(visibleApps, updateMap) {
-        visibleApps
-            .filter { updateMap.containsKey(it.packageName) }
-            .sortedWith(
-                compareByDescending<InstalledApp> {
-                    updateMap[it.packageName]?.apkMirrorUploadedAt ?: Long.MIN_VALUE
-                }.thenBy { it.appName.lowercase() }
-            )
+        visibleApps.filter { updateMap.containsKey(it.packageName) }
     }
 
     manualUpdateApp?.let { app ->
@@ -436,11 +433,13 @@ private fun AppListItem(
 @Composable
 private fun AppIconImage(packageName: String, modifier: Modifier = Modifier) {
     val context = LocalContext.current
-    val bitmap = remember(packageName) {
-        runCatching { drawableToBitmap(context.packageManager.getApplicationIcon(packageName)) }.getOrNull()
+    val bitmap by produceState<Bitmap?>(initialValue = null, packageName) {
+        value = withContext(Dispatchers.IO) {
+            runCatching { drawableToBitmap(context.packageManager.getApplicationIcon(packageName)) }.getOrNull()
+        }
     }
     if (bitmap != null) {
-        Image(bitmap = bitmap.asImageBitmap(), contentDescription = null, modifier = modifier)
+        Image(bitmap = bitmap!!.asImageBitmap(), contentDescription = null, modifier = modifier)
     } else {
         Box(modifier = modifier, contentAlignment = Alignment.Center) {
             Icon(Icons.Rounded.Search, contentDescription = null)

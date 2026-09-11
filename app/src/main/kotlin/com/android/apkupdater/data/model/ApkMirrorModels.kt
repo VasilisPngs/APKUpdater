@@ -20,8 +20,7 @@ data class AppExistsResponseData(
 )
 
 data class AppExistsRelease(
-    val version: String? = null,
-    @Json(name = "whats_new") val whatsNew: String? = null
+    val version: String? = null
 )
 
 data class AppExistsApk(

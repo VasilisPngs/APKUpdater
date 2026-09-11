@@ -5,27 +5,19 @@ import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
 import android.content.pm.SigningInfo
 import android.os.Build
-import com.android.apkupdater.data.api.ApkMirrorPageService
 import com.android.apkupdater.data.api.ApkMirrorService
 import com.android.apkupdater.data.model.AppExistsApk
 import com.android.apkupdater.data.model.AppExistsRequest
 import com.android.apkupdater.data.model.AppExistsResponseData
 import com.android.apkupdater.data.model.AppUpdateInfo
 import com.android.apkupdater.data.model.InstalledApp
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.async
-import kotlinx.coroutines.awaitAll
-import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.withContext
 import java.security.MessageDigest
-import java.time.LocalDateTime
-import java.time.ZoneOffset
-import java.time.format.DateTimeFormatterBuilder
-import java.util.Locale
-import java.util.concurrent.ConcurrentHashMap
 
 sealed interface ScanStatus {
     data object Idle : ScanStatus
@@ -36,13 +28,11 @@ sealed interface ScanStatus {
 
 class AppUpdateRepository(
     context: Context,
-    private val service: ApkMirrorService = ApkMirrorService.create(),
-    private val pageService: ApkMirrorPageService = ApkMirrorPageService.create()
+    private val service: ApkMirrorService = ApkMirrorService.create()
 ) {
     private val packageManager = context.packageManager
     private val isAndroidTv = packageManager.hasSystemFeature(PackageManager.FEATURE_LEANBACK)
     private val deviceAbis = Build.SUPPORTED_ABIS.map(String::lowercase).toSet()
-    private val uploadedAtCache = ConcurrentHashMap<String, Long>()
 
     suspend fun getInstalledApps(): List<InstalledApp> = withContext(Dispatchers.IO) {
         packageManager.getInstalledPackages(
@@ -93,6 +83,8 @@ class AppUpdateRepository(
                     )
                 )
                 updates += parseUpdates(response.data, batch)
+            } catch (exception: CancellationException) {
+                throw exception
             } catch (_: Exception) {
                 failedBatches++
             }
@@ -101,47 +93,16 @@ class AppUpdateRepository(
             emit(ScanStatus.Scanning(processed, appsToCheck.size, batch.last().appName))
         }
 
-        val enrichedUpdates = enrichWithApkMirrorUploadTimes(updates)
         when {
             failedBatches == batches.size -> {
-                emit(ScanStatus.Error("Unable to reach APKMirror.", enrichedUpdates))
+                emit(ScanStatus.Error("Unable to reach APKMirror.", updates))
             }
             failedBatches > 0 -> {
-                emit(ScanStatus.Error("Some applications could not be checked.", enrichedUpdates))
+                emit(ScanStatus.Error("Some applications could not be checked.", updates))
             }
-            else -> emit(ScanStatus.Success(enrichedUpdates))
+            else -> emit(ScanStatus.Success(updates))
         }
     }.flowOn(Dispatchers.IO)
-
-    private suspend fun enrichWithApkMirrorUploadTimes(
-        updates: List<AppUpdateInfo>
-    ): List<AppUpdateInfo> = coroutineScope {
-        updates.chunked(PAGE_CONCURRENCY).flatMap { chunk ->
-            chunk.map { update ->
-                async {
-                    val uploadedAt = uploadedAtCache[update.apkMirrorUrl]
-                        ?: fetchApkMirrorUploadTime(update.apkMirrorUrl)?.also {
-                            uploadedAtCache[update.apkMirrorUrl] = it
-                        }
-                    update.copy(apkMirrorUploadedAt = uploadedAt)
-                }
-            }.awaitAll()
-        }
-    }
-
-    private suspend fun fetchApkMirrorUploadTime(url: String): Long? = runCatching {
-        val html = pageService.getReleasePage(url).string()
-        UPLOADED_AT_PATTERN.find(html)?.groupValues?.get(1)?.let { value ->
-            runCatching {
-                DateTimeFormatterBuilder()
-                    .appendPattern("MMMM d, uuuu 'at' h:mma 'UTC'")
-                    .toFormatter(Locale.US)
-                    .parse(value, LocalDateTime::from)
-                    .toInstant(ZoneOffset.UTC)
-                    .toEpochMilli()
-            }.getOrNull()
-        }
-    }.getOrNull()
 
     private fun parseUpdates(
         apiDataList: List<AppExistsResponseData>,
@@ -174,7 +135,6 @@ class AppUpdateRepository(
                     currentVersionCode = installed.versionCode,
                     newVersionName = release.version.orEmpty(),
                     newVersionCode = bestApk.versionCode,
-                    whatsNew = release.whatsNew,
                     apkMirrorUrl = url
                 )
             }
@@ -237,10 +197,6 @@ class AppUpdateRepository(
 
     private companion object {
         const val API_BATCH_SIZE = 100
-        const val PAGE_CONCURRENCY = 4
         val STABLE_RELEASE_EXCLUSIONS = listOf("alpha", "beta")
-        val UPLOADED_AT_PATTERN = Regex(
-            "Uploaded:\\s*([A-Za-z]+\\s+\\d{1,2},\\s+\\d{4}\\s+at\\s+\\d{1,2}:\\d{2}(?:AM|PM)\\s+UTC)"
-        )
     }
 }

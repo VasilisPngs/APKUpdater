@@ -7,6 +7,7 @@ import com.aurora.gplayapi.data.models.PlayFile
 import com.aurora.gplayapi.helpers.AppDetailsHelper
 import com.aurora.gplayapi.helpers.AuthHelper
 import com.aurora.gplayapi.helpers.PurchaseHelper
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -55,6 +56,8 @@ class GooglePlayInstaller(private val context: Context) {
             apkFiles.forEach(File::delete)
             onState(InstallState.Success(app.appName))
             Result.success(Unit)
+        } catch (exception: CancellationException) {
+            throw exception
         } catch (exception: Exception) {
             onState(InstallState.Error(app.appName, exception.message ?: "Installation failed"))
             Result.failure(exception)
