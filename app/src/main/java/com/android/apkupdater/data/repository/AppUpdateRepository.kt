@@ -70,16 +70,13 @@ class AppUpdateRepository(
         }.sortedWith(compareBy({ it.isSystemApp }, { it.appName.lowercase() }))
     }
 
-    fun scanForUpdates(
-        appsToCheck: List<InstalledApp>,
-        onlyStable: Boolean = true
-    ): Flow<ScanStatus> = flow {
+    fun scanForUpdates(appsToCheck: List<InstalledApp>): Flow<ScanStatus> = flow {
         if (appsToCheck.isEmpty()) {
             emit(ScanStatus.Success(emptyList()))
             return@flow
         }
 
-        val exclude = if (onlyStable) listOf("alpha", "beta") else emptyList()
+        val exclude = listOf("alpha", "beta")
         val batches = appsToCheck.chunked(100)
         val updates = mutableListOf<AppUpdateInfo>()
         var processed = 0
