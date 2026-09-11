@@ -45,10 +45,13 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -66,6 +69,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.android.apkupdater.R
 import com.android.apkupdater.data.model.AppUpdateInfo
 import com.android.apkupdater.data.model.InstalledApp
+import com.android.apkupdater.data.model.InstallState
 import com.android.apkupdater.data.repository.ScanStatus
 import kotlinx.coroutines.launch
 
@@ -88,8 +92,24 @@ fun ApkUpdaterScreen(
     val homeListState = rememberLazyListState()
     val searchListState = rememberLazyListState()
     val coroutineScope = rememberCoroutineScope()
-
+    val snackbarHostState = remember { SnackbarHostState() }
     val selectedTab = AppTab.entries[selectedTabIndex]
+    val installActive = uiState.installState is InstallState.Preparing ||
+        uiState.installState is InstallState.Downloading ||
+        uiState.installState is InstallState.Installing
+
+    LaunchedEffect(uiState.installState) {
+        when (val state = uiState.installState) {
+            is InstallState.Success -> snackbarHostState.showSnackbar(
+                context.getString(R.string.update_installed, state.appName)
+            )
+            is InstallState.Error -> snackbarHostState.showSnackbar(
+                context.getString(R.string.update_failed, state.message)
+            )
+            else -> Unit
+        }
+    }
+
     val updateMap = remember(uiState.updates) {
         uiState.updates.associateBy(AppUpdateInfo::packageName)
     }
@@ -124,11 +144,8 @@ fun ApkUpdaterScreen(
             app = app,
             onDismiss = { manualUpdateApp = null },
             onConfirm = { versionCode ->
-                openUrlInBrowser(
-                    context,
-                    buildManualApkMirrorSearchUrl(app.packageName, versionCode)
-                )
                 manualUpdateApp = null
+                viewModel.installManual(app, versionCode)
             }
         )
     }
@@ -140,11 +157,8 @@ fun ApkUpdaterScreen(
             CenterAlignedTopAppBar(
                 title = {
                     Text(
-                        if (selectedTab == AppTab.Home) {
-                            stringResource(R.string.app_name)
-                        } else {
-                            stringResource(selectedTab.labelRes)
-                        }
+                        if (selectedTab == AppTab.Home) stringResource(R.string.app_name)
+                        else stringResource(selectedTab.labelRes)
                     )
                 }
             )
@@ -179,42 +193,39 @@ fun ApkUpdaterScreen(
                     )
                 }
             }
-        }
+        },
+        snackbarHost = { SnackbarHost(snackbarHostState) }
     ) { innerPadding ->
         when (selectedTab) {
             AppTab.Home -> HomeContent(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(innerPadding),
+                modifier = Modifier.fillMaxSize().padding(innerPadding),
                 status = uiState.scanStatus,
                 apps = appsWithUpdates,
                 updateMap = updateMap,
                 listState = homeListState,
+                installActive = installActive,
                 onScanClick = viewModel::scanForUpdates,
-                onOpenApkMirror = { update -> openUrlInBrowser(context, update.apkMirrorUrl) },
-                onManualUpdate = { app -> manualUpdateApp = app }
+                onUpdate = viewModel::installUpdate,
+                onManualUpdate = { manualUpdateApp = it }
             )
             AppTab.Search -> SearchContent(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(innerPadding),
+                modifier = Modifier.fillMaxSize().padding(innerPadding),
                 searchQuery = uiState.searchQuery,
                 onSearchQueryChange = viewModel::setSearchQuery,
                 apps = visibleApps,
                 updateMap = updateMap,
                 listState = searchListState,
+                installActive = installActive,
+                onUpdate = viewModel::installUpdate,
                 onOpenApkMirror = { app ->
                     val url = updateMap[app.packageName]?.apkMirrorUrl
                         ?: buildApkMirrorSearchUrl(app.packageName)
                     openUrlInBrowser(context, url)
                 },
-                onManualUpdate = { app -> manualUpdateApp = app }
+                onManualUpdate = { manualUpdateApp = it }
             )
             AppTab.Settings -> SettingsContent(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(innerPadding)
-                    .navigationBarsPadding(),
+                modifier = Modifier.fillMaxSize().padding(innerPadding).navigationBarsPadding(),
                 includeSystemApps = uiState.includeSystemApps,
                 onIncludeSystemAppsChange = viewModel::setIncludeSystemApps,
                 includeDisabledApps = uiState.includeDisabledApps,
@@ -231,17 +242,13 @@ private fun HomeContent(
     apps: List<InstalledApp>,
     updateMap: Map<String, AppUpdateInfo>,
     listState: LazyListState,
+    installActive: Boolean,
     onScanClick: () -> Unit,
-    onOpenApkMirror: (AppUpdateInfo) -> Unit,
+    onUpdate: (AppUpdateInfo) -> Unit,
     onManualUpdate: (InstalledApp) -> Unit
 ) {
     Column(modifier = modifier) {
-        ScanStatusSection(
-            status = status,
-            updatesCount = apps.size,
-            onScanClick = onScanClick
-        )
-
+        ScanStatusSection(status, apps.size, onScanClick)
         if (apps.isEmpty()) {
             EmptyAppsView(
                 when (status) {
@@ -253,7 +260,7 @@ private fun HomeContent(
             LazyColumn(
                 state = listState,
                 modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(start = 16.dp, top = 8.dp, end = 16.dp, bottom = 16.dp),
+                contentPadding = PaddingValues(16.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 items(apps, key = { it.packageName }) { app ->
@@ -261,7 +268,8 @@ private fun HomeContent(
                         AppListItem(
                             app = app,
                             update = update,
-                            onOpenApkMirror = { onOpenApkMirror(update) },
+                            installActive = installActive,
+                            onUpdate = { onUpdate(update) },
                             onManualUpdate = { onManualUpdate(app) }
                         )
                     }
@@ -279,6 +287,8 @@ private fun SearchContent(
     apps: List<InstalledApp>,
     updateMap: Map<String, AppUpdateInfo>,
     listState: LazyListState,
+    installActive: Boolean,
+    onUpdate: (AppUpdateInfo) -> Unit,
     onOpenApkMirror: (InstalledApp) -> Unit,
     onManualUpdate: (InstalledApp) -> Unit
 ) {
@@ -286,9 +296,7 @@ private fun SearchContent(
         OutlinedTextField(
             value = searchQuery,
             onValueChange = onSearchQueryChange,
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 8.dp),
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
             placeholder = { Text(stringResource(R.string.search_apps)) },
             leadingIcon = { Icon(Icons.Rounded.Search, contentDescription = null) },
             trailingIcon = {
@@ -301,26 +309,24 @@ private fun SearchContent(
             singleLine = true,
             shape = MaterialTheme.shapes.large
         )
-
         if (apps.isEmpty()) {
             EmptyAppsView(
-                if (searchQuery.isNotEmpty()) {
-                    stringResource(R.string.no_apps_matching, searchQuery)
-                } else {
-                    stringResource(R.string.no_applications_found)
-                }
+                if (searchQuery.isNotEmpty()) stringResource(R.string.no_apps_matching, searchQuery)
+                else stringResource(R.string.no_applications_found)
             )
         } else {
             LazyColumn(
                 state = listState,
                 modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(start = 16.dp, top = 8.dp, end = 16.dp, bottom = 16.dp),
+                contentPadding = PaddingValues(16.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 items(apps, key = { it.packageName }) { app ->
                     AppListItem(
                         app = app,
                         update = updateMap[app.packageName],
+                        installActive = installActive,
+                        onUpdate = { updateMap[app.packageName]?.let(onUpdate) },
                         onOpenApkMirror = { onOpenApkMirror(app) },
                         onManualUpdate = { onManualUpdate(app) }
                     )
@@ -331,61 +337,37 @@ private fun SearchContent(
 }
 
 @Composable
-private fun ScanStatusSection(
-    status: ScanStatus,
-    updatesCount: Int,
-    onScanClick: () -> Unit
-) {
+private fun ScanStatusSection(status: ScanStatus, updatesCount: Int, onScanClick: () -> Unit) {
     when (status) {
         is ScanStatus.Scanning -> {
             ListItem(
                 headlineContent = { Text(stringResource(R.string.checking_for_updates)) },
-                supportingContent = { Text("${status.processed} of ${status.total} · ${status.currentBatch}") }
+                supportingContent = { Text(stringResource(R.string.scan_progress, status.processed, status.total, status.currentBatch)) }
             )
             LinearProgressIndicator(
                 progress = { if (status.total == 0) 0f else status.processed.toFloat() / status.total },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp)
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp)
             )
         }
         is ScanStatus.Success -> {
             ListItem(
                 headlineContent = {
-                    Text(
-                        if (updatesCount > 0) {
-                            stringResource(R.string.updates_available, updatesCount)
-                        } else {
-                            stringResource(R.string.all_apps_up_to_date)
-                        }
-                    )
+                    Text(if (updatesCount > 0) stringResource(R.string.updates_available, updatesCount) else stringResource(R.string.all_apps_up_to_date))
                 },
-                trailingContent = {
-                    TextButton(onClick = onScanClick) {
-                        Text(stringResource(R.string.check_again))
-                    }
-                }
+                trailingContent = { TextButton(onClick = onScanClick) { Text(stringResource(R.string.check_again)) } }
             )
         }
         is ScanStatus.Error -> {
             ListItem(
                 headlineContent = { Text(stringResource(R.string.update_check_failed)) },
                 supportingContent = { Text(status.message) },
-                trailingContent = {
-                    TextButton(onClick = onScanClick) {
-                        Text(stringResource(R.string.retry))
-                    }
-                }
+                trailingContent = { TextButton(onClick = onScanClick) { Text(stringResource(R.string.retry)) } }
             )
         }
         ScanStatus.Idle -> {
             ListItem(
                 headlineContent = { Text(stringResource(R.string.ready_to_check)) },
-                trailingContent = {
-                    TextButton(onClick = onScanClick) {
-                        Text(stringResource(R.string.check_now))
-                    }
-                }
+                trailingContent = { TextButton(onClick = onScanClick) { Text(stringResource(R.string.check_now)) } }
             )
         }
     }
@@ -395,29 +377,18 @@ private fun ScanStatusSection(
 private fun AppListItem(
     app: InstalledApp,
     update: AppUpdateInfo?,
-    onOpenApkMirror: () -> Unit,
+    installActive: Boolean,
+    onUpdate: () -> Unit,
+    onOpenApkMirror: () -> Unit = {},
     onManualUpdate: () -> Unit
 ) {
-    OutlinedCard(
-        modifier = Modifier.fillMaxWidth(),
-        shape = MaterialTheme.shapes.large
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(20.dp)
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.Top
-            ) {
+    OutlinedCard(modifier = Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.large) {
+        Column(modifier = Modifier.fillMaxWidth().padding(20.dp)) {
+            Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
                 AppIconImage(app.packageName, Modifier.size(64.dp))
                 Spacer(Modifier.width(20.dp))
                 Column(modifier = Modifier.weight(1f)) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.Top
-                    ) {
+                    Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
                         Text(
                             text = app.appName,
                             modifier = Modifier.weight(1f),
@@ -427,67 +398,37 @@ private fun AppListItem(
                         )
                         Spacer(Modifier.width(16.dp))
                         Text(
-                            text = if (app.isSystemApp) {
-                                stringResource(R.string.system)
-                            } else {
-                                stringResource(R.string.user)
-                            },
+                            text = if (app.isSystemApp) stringResource(R.string.system) else stringResource(R.string.user),
                             style = MaterialTheme.typography.labelMedium
                         )
                     }
-
                     Spacer(Modifier.height(4.dp))
                     Text(
                         text = stringResource(R.string.version_display, app.versionName, app.versionCode),
-                        style = MaterialTheme.typography.bodyLarge,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis
+                        style = MaterialTheme.typography.bodyLarge
                     )
-
                     if (update != null) {
+                        Text(text = "↓", modifier = Modifier.padding(vertical = 4.dp), style = MaterialTheme.typography.titleLarge)
                         Text(
-                            text = "↓",
-                            modifier = Modifier.padding(vertical = 4.dp),
-                            style = MaterialTheme.typography.titleLarge
-                        )
-                        Text(
-                            text = stringResource(
-                                R.string.version_display,
-                                update.newVersionName,
-                                update.newVersionCode
-                            ),
-                            style = MaterialTheme.typography.bodyLarge,
-                            maxLines = 2,
-                            overflow = TextOverflow.Ellipsis
+                            text = stringResource(R.string.version_display, update.newVersionName, update.newVersionCode),
+                            style = MaterialTheme.typography.bodyLarge
                         )
                     }
                 }
             }
 
             Spacer(Modifier.height(16.dp))
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.End
-            ) {
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
                 if (update != null) {
-                    FilledTonalButton(
-                        onClick = onOpenApkMirror,
-                        shape = MaterialTheme.shapes.extraLarge
-                    ) {
+                    FilledTonalButton(onClick = onUpdate, enabled = !installActive, shape = MaterialTheme.shapes.extraLarge) {
                         Text(stringResource(R.string.update))
                     }
                     Spacer(Modifier.width(8.dp))
-                    OutlinedButton(
-                        onClick = onManualUpdate,
-                        shape = MaterialTheme.shapes.extraLarge
-                    ) {
+                    OutlinedButton(onClick = onManualUpdate, enabled = !installActive, shape = MaterialTheme.shapes.extraLarge) {
                         Text(stringResource(R.string.manual))
                     }
                 } else {
-                    FilledTonalButton(
-                        onClick = onOpenApkMirror,
-                        shape = MaterialTheme.shapes.extraLarge
-                    ) {
+                    FilledTonalButton(onClick = onOpenApkMirror, shape = MaterialTheme.shapes.extraLarge) {
                         Text(stringResource(R.string.apkmirror))
                     }
                 }
@@ -497,17 +438,11 @@ private fun AppListItem(
 }
 
 @Composable
-private fun AppIconImage(
-    packageName: String,
-    modifier: Modifier = Modifier
-) {
+private fun AppIconImage(packageName: String, modifier: Modifier = Modifier) {
     val context = LocalContext.current
     val bitmap = remember(packageName) {
-        runCatching {
-            drawableToBitmap(context.packageManager.getApplicationIcon(packageName))
-        }.getOrNull()
+        runCatching { drawableToBitmap(context.packageManager.getApplicationIcon(packageName)) }.getOrNull()
     }
-
     if (bitmap != null) {
         Image(bitmap = bitmap.asImageBitmap(), contentDescription = null, modifier = modifier)
     } else {
@@ -529,28 +464,19 @@ private fun SettingsContent(
         ListItem(
             headlineContent = { Text(stringResource(R.string.system_apps)) },
             supportingContent = { Text(stringResource(R.string.system_apps_description)) },
-            trailingContent = {
-                Switch(checked = includeSystemApps, onCheckedChange = onIncludeSystemAppsChange)
-            }
+            trailingContent = { Switch(checked = includeSystemApps, onCheckedChange = onIncludeSystemAppsChange) }
         )
         ListItem(
             headlineContent = { Text(stringResource(R.string.disabled_apps)) },
             supportingContent = { Text(stringResource(R.string.disabled_apps_description)) },
-            trailingContent = {
-                Switch(checked = includeDisabledApps, onCheckedChange = onIncludeDisabledAppsChange)
-            }
+            trailingContent = { Switch(checked = includeDisabledApps, onCheckedChange = onIncludeDisabledAppsChange) }
         )
     }
 }
 
 @Composable
 private fun EmptyAppsView(message: String) {
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(32.dp),
-        contentAlignment = Alignment.Center
-    ) {
+    Box(modifier = Modifier.fillMaxSize().padding(32.dp), contentAlignment = Alignment.Center) {
         Text(message, style = MaterialTheme.typography.titleMedium)
     }
 }
@@ -570,11 +496,6 @@ private fun drawableToBitmap(drawable: Drawable): Bitmap {
 private fun buildApkMirrorSearchUrl(packageName: String): String =
     "https://www.apkmirror.com/?post_type=app_release&searchtype=app&s=${Uri.encode(packageName)}"
 
-private fun buildManualApkMirrorSearchUrl(packageName: String, versionCode: Long): String =
-    "https://www.apkmirror.com/?post_type=app_release&searchtype=app&s=${Uri.encode("$packageName $versionCode")}"
-
 private fun openUrlInBrowser(context: Context, url: String) {
-    runCatching {
-        context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
-    }
+    runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url))) }
 }

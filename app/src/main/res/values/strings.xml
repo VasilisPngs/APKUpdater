@@ -13,6 +13,7 @@
     <string name="checking_installed_apps">Checking installed apps for updates</string>
     <string name="no_updates_available">No updates available</string>
     <string name="checking_for_updates">Checking for updates</string>
+    <string name="scan_progress">%1$d of %2$d · %3$s</string>
     <string name="updates_available">%1$d updates available</string>
     <string name="all_apps_up_to_date">All apps are up to date</string>
     <string name="check_again">Check again</string>
@@ -27,4 +28,11 @@
     <string name="system_apps_description">Include pre-installed system applications</string>
     <string name="disabled_apps">Disabled apps</string>
     <string name="disabled_apps_description">Include disabled applications when checking for updates</string>
+    <string name="manual_update">Manual update</string>
+    <string name="version_code">Version code</string>
+    <string name="enter_newer_version_code">Enter a version code newer than %1$d</string>
+    <string name="ok">OK</string>
+    <string name="cancel">Cancel</string>
+    <string name="update_installed">%1$s was updated</string>
+    <string name="update_failed">Update failed: %1$s</string>
 </resources>

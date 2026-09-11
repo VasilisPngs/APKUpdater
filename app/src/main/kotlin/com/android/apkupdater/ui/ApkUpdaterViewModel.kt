@@ -3,17 +3,21 @@ package com.android.apkupdater.ui
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.android.apkupdater.data.installer.ApkMirrorInstaller
 import com.android.apkupdater.data.model.AppUpdateInfo
 import com.android.apkupdater.data.model.InstalledApp
+import com.android.apkupdater.data.model.InstallState
 import com.android.apkupdater.data.preferences.AppPreferences
 import com.android.apkupdater.data.repository.AppUpdateRepository
 import com.android.apkupdater.data.repository.ScanStatus
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 data class UpdaterUiState(
     val scanStatus: ScanStatus = ScanStatus.Idle,
@@ -21,12 +25,14 @@ data class UpdaterUiState(
     val updates: List<AppUpdateInfo> = emptyList(),
     val searchQuery: String = "",
     val includeSystemApps: Boolean = false,
-    val includeDisabledApps: Boolean = false
+    val includeDisabledApps: Boolean = false,
+    val installState: InstallState = InstallState.Idle
 )
 
 class ApkUpdaterViewModel(application: Application) : AndroidViewModel(application) {
     private val repository = AppUpdateRepository(application.applicationContext)
     private val preferences = AppPreferences(application.applicationContext)
+    private val installer = ApkMirrorInstaller(application.applicationContext)
     private val _uiState = MutableStateFlow(
         UpdaterUiState(
             includeSystemApps = preferences.includeSystemApps,
@@ -34,6 +40,7 @@ class ApkUpdaterViewModel(application: Application) : AndroidViewModel(applicati
         )
     )
     private var scanJob: Job? = null
+    private var installJob: Job? = null
 
     val uiState: StateFlow<UpdaterUiState> = _uiState.asStateFlow()
 
@@ -42,7 +49,7 @@ class ApkUpdaterViewModel(application: Application) : AndroidViewModel(applicati
     }
 
     fun refreshInstalledAppsAndScan() {
-        viewModelScope.launch {
+        viewModelScope.launch(Dispatchers.IO) {
             val apps = repository.getInstalledApps()
             _uiState.update { it.copy(installedApps = apps) }
             scanForUpdates()
@@ -81,6 +88,32 @@ class ApkUpdaterViewModel(application: Application) : AndroidViewModel(applicati
         }
     }
 
+    fun installUpdate(update: AppUpdateInfo) {
+        val app = _uiState.value.installedApps.firstOrNull { it.packageName == update.packageName } ?: return
+        install(app, update.newVersionCode, update.apkMirrorUrl)
+    }
+
+    fun installManual(app: InstalledApp, versionCode: Long) {
+        install(app, versionCode, null)
+    }
+
+    private fun install(app: InstalledApp, versionCode: Long, releasePageUrl: String?) {
+        if (installJob?.isActive == true) return
+        scanJob?.cancel()
+        installJob = viewModelScope.launch {
+            val result = withContext(Dispatchers.IO) {
+                installer.install(app, versionCode, releasePageUrl) { state ->
+                    _uiState.update { it.copy(installState = state) }
+                }
+            }
+            if (result.isSuccess) {
+                val apps = withContext(Dispatchers.IO) { repository.getInstalledApps() }
+                _uiState.update { it.copy(installedApps = apps) }
+                scanForUpdates()
+            }
+        }
+    }
+
     fun setSearchQuery(query: String) {
         _uiState.update { it.copy(searchQuery = query) }
     }
@@ -101,6 +134,7 @@ class ApkUpdaterViewModel(application: Application) : AndroidViewModel(applicati
 
     override fun onCleared() {
         scanJob?.cancel()
+        installJob?.cancel()
         super.onCleared()
     }
 }
