@@ -3,7 +3,7 @@ package com.android.apkupdater.ui
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
-import com.android.apkupdater.data.installer.ApkMirrorInstaller
+import com.android.apkupdater.data.installer.GooglePlayInstaller
 import com.android.apkupdater.data.model.AppUpdateInfo
 import com.android.apkupdater.data.model.InstalledApp
 import com.android.apkupdater.data.model.InstallState
@@ -32,7 +32,7 @@ data class UpdaterUiState(
 class ApkUpdaterViewModel(application: Application) : AndroidViewModel(application) {
     private val repository = AppUpdateRepository(application.applicationContext)
     private val preferences = AppPreferences(application.applicationContext)
-    private val installer = ApkMirrorInstaller(application.applicationContext)
+    private val installer = GooglePlayInstaller(application.applicationContext)
     private val _uiState = MutableStateFlow(
         UpdaterUiState(
             includeSystemApps = preferences.includeSystemApps,
@@ -88,27 +88,23 @@ class ApkUpdaterViewModel(application: Application) : AndroidViewModel(applicati
         }
     }
 
-    fun installUpdate(update: AppUpdateInfo) {
-        val app = _uiState.value.installedApps.firstOrNull { it.packageName == update.packageName } ?: return
-        install(app, update.newVersionCode, update.apkMirrorUrl)
-    }
-
-    fun installManual(app: InstalledApp, versionCode: Long) {
-        install(app, versionCode, null)
-    }
-
-    private fun install(app: InstalledApp, versionCode: Long, releasePageUrl: String?) {
+    fun installManual(app: InstalledApp, versionCode: Long, accountEmail: String) {
         if (installJob?.isActive == true) return
         scanJob?.cancel()
         installJob = viewModelScope.launch {
             val result = withContext(Dispatchers.IO) {
-                installer.install(app, versionCode, releasePageUrl) { state ->
+                installer.install(app, versionCode, accountEmail) { state ->
                     _uiState.update { it.copy(installState = state) }
                 }
             }
             if (result.isSuccess) {
                 val apps = withContext(Dispatchers.IO) { repository.getInstalledApps() }
-                _uiState.update { it.copy(installedApps = apps) }
+                _uiState.update {
+                    it.copy(
+                        installedApps = apps,
+                        installState = InstallState.Success(app.appName)
+                    )
+                }
                 scanForUpdates()
             }
         }
