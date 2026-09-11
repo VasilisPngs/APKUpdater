@@ -13,7 +13,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -28,7 +27,6 @@ import androidx.compose.material.icons.rounded.ArrowForward
 import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.Home
-import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material3.CenterAlignedTopAppBar
@@ -93,21 +91,13 @@ fun ApkUpdaterScreen(
                 app.packageName.contains(searchQuery, ignoreCase = true)
         }
     val appsWithUpdates = visibleApps.filter { updateMap.containsKey(it.packageName) }
-    val isScanning = scanStatus is ScanStatus.Scanning
 
     Scaffold(
         modifier = modifier.fillMaxSize(),
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
             CenterAlignedTopAppBar(
-                title = { Text(if (selectedAppTab == AppTab.Home) "APKUpdater" else selectedAppTab.label) },
-                actions = {
-                    if (selectedAppTab != AppTab.Settings) {
-                        IconButton(onClick = viewModel::scanForUpdates, enabled = !isScanning) {
-                            Icon(Icons.Rounded.Refresh, contentDescription = "Check for updates")
-                        }
-                    }
-                }
+                title = { Text(if (selectedAppTab == AppTab.Home) "APKUpdater" else selectedAppTab.label) }
             )
         },
         bottomBar = {
