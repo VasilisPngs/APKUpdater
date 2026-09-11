@@ -18,10 +18,3 @@ data class AppUpdateInfo(
     val whatsNew: String?,
     val apkMirrorUrl: String
 )
-
-enum class AppFilter {
-    UPDATES_ONLY,
-    USER_APPS,
-    ALL_APPS,
-    SYSTEM_APPS
-}
