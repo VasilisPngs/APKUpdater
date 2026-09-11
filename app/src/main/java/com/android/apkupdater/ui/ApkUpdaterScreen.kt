@@ -25,11 +25,12 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.rounded.CheckCircle
+import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material.icons.rounded.Refresh
+import androidx.compose.material.icons.rounded.Search
+import androidx.compose.material.icons.rounded.Settings
+import androidx.compose.material.icons.rounded.Update
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CenterAlignedTopAppBar
@@ -94,10 +95,10 @@ fun ApkUpdaterScreen(
                 title = { Text("APKUpdater") },
                 actions = {
                     IconButton(onClick = viewModel::scanForUpdates, enabled = !isScanning) {
-                        Icon(Icons.Default.Refresh, contentDescription = "Check for updates")
+                        Icon(Icons.Rounded.Refresh, contentDescription = "Check for updates")
                     }
                     IconButton(onClick = { showSettings = true }) {
-                        Icon(Icons.Default.Settings, contentDescription = "Settings")
+                        Icon(Icons.Rounded.Settings, contentDescription = "Settings")
                     }
                 }
             )
@@ -122,15 +123,16 @@ fun ApkUpdaterScreen(
                     .fillMaxWidth()
                     .padding(horizontal = 16.dp, vertical = 8.dp),
                 placeholder = { Text("Search apps") },
-                leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
+                leadingIcon = { Icon(Icons.Rounded.Search, contentDescription = null) },
                 trailingIcon = {
                     if (searchQuery.isNotEmpty()) {
                         IconButton(onClick = { viewModel.setSearchQuery("") }) {
-                            Icon(Icons.Default.Close, contentDescription = "Clear search")
+                            Icon(Icons.Rounded.Close, contentDescription = "Clear search")
                         }
                     }
                 },
-                singleLine = true
+                singleLine = true,
+                shape = MaterialTheme.shapes.large
             )
 
             if (visibleApps.isEmpty()) {
@@ -190,7 +192,7 @@ private fun ScanStatusSection(
         }
         is ScanStatus.Success -> {
             ListItem(
-                leadingContent = { Icon(Icons.Default.CheckCircle, contentDescription = null) },
+                leadingContent = { Icon(Icons.Rounded.CheckCircle, contentDescription = null) },
                 headlineContent = {
                     Text(if (updatesCount > 0) "$updatesCount updates available" else "All apps are up to date")
                 },
@@ -221,7 +223,10 @@ private fun AppListItem(
     update: AppUpdateInfo?,
     onOpenApkMirror: () -> Unit
 ) {
-    Card(modifier = Modifier.fillMaxWidth()) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = MaterialTheme.shapes.medium
+    ) {
         ListItem(
             leadingContent = { AppIconImage(app.packageName, Modifier.size(48.dp)) },
             headlineContent = {
@@ -252,7 +257,7 @@ private fun AppListItem(
             },
             trailingContent = {
                 FilledTonalButton(onClick = onOpenApkMirror) {
-                    Icon(Icons.Default.Search, contentDescription = null)
+                    Icon(Icons.Rounded.Update, contentDescription = null)
                     Spacer(Modifier.width(8.dp))
                     Text("Update")
                 }
@@ -277,7 +282,7 @@ private fun AppIconImage(
         Image(bitmap = bitmap.asImageBitmap(), contentDescription = null, modifier = modifier)
     } else {
         Box(modifier = modifier, contentAlignment = Alignment.Center) {
-            Icon(Icons.Default.Search, contentDescription = null)
+            Icon(Icons.Rounded.Search, contentDescription = null)
         }
     }
 }
@@ -305,7 +310,8 @@ private fun SettingsContent(
             onClick = onClose,
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp)
+                .padding(16.dp),
+            shape = MaterialTheme.shapes.extraLarge
         ) {
             Text("Done")
         }
