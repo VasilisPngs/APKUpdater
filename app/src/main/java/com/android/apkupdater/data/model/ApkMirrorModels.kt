@@ -1,5 +1,7 @@
 package com.android.apkupdater.data.model
 
+import com.squareup.moshi.Json
+
 data class AppExistsRequest(
     val pnames: List<String>,
     val exclude: List<String> = listOf("alpha", "beta")
@@ -19,14 +21,14 @@ data class AppExistsResponseData(
 
 data class AppExistsRelease(
     val version: String? = null,
-    val whatsNew: String? = null
+    @Json(name = "whats_new") val whatsNew: String? = null
 )
 
 data class AppExistsApk(
-    val versionCode: Long = 0,
+    @Json(name = "version_code") val versionCode: Long = 0,
     val link: String = "",
     val arches: List<String> = emptyList(),
     val minapi: String? = "0",
     val capabilities: List<String>? = null,
-    val signaturesSha1: List<String>? = null
+    @Json(name = "signatures-sha1") val signaturesSha1: List<String>? = null
 )
