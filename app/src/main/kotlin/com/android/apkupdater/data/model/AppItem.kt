@@ -6,7 +6,8 @@ data class InstalledApp(
     val versionName: String,
     val versionCode: Long,
     val signatureSha1: String,
-    val isSystemApp: Boolean
+    val isSystemApp: Boolean,
+    val isEnabled: Boolean
 )
 
 data class AppUpdateInfo(

@@ -72,7 +72,8 @@ class AppUpdateRepository(
                     versionName = pkg.versionName ?: "Unknown",
                     versionCode = pkg.longVersionCode,
                     signatureSha1 = signatureSha1,
-                    isSystemApp = isSystem
+                    isSystemApp = isSystem,
+                    isEnabled = appInfo.enabled
                 )
             }.getOrNull()
         }.sortedWith(compareBy({ it.isSystemApp }, { it.appName.lowercase() }))

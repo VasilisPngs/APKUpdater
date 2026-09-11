@@ -22,6 +22,7 @@ class ApkUpdaterViewModel(application: Application) : AndroidViewModel(applicati
     private val _updates = MutableStateFlow<List<AppUpdateInfo>>(emptyList())
     private val _searchQuery = MutableStateFlow("")
     private val _includeSystemApps = MutableStateFlow(preferences.includeSystemApps)
+    private val _includeDisabledApps = MutableStateFlow(preferences.includeDisabledApps)
     private var scanJob: Job? = null
 
     val scanStatus: StateFlow<ScanStatus> = _scanStatus.asStateFlow()
@@ -29,6 +30,7 @@ class ApkUpdaterViewModel(application: Application) : AndroidViewModel(applicati
     val updates: StateFlow<List<AppUpdateInfo>> = _updates.asStateFlow()
     val searchQuery: StateFlow<String> = _searchQuery.asStateFlow()
     val includeSystemApps: StateFlow<Boolean> = _includeSystemApps.asStateFlow()
+    val includeDisabledApps: StateFlow<Boolean> = _includeDisabledApps.asStateFlow()
 
     init {
         loadInstalledApps(autoScan = true)
@@ -48,11 +50,13 @@ class ApkUpdaterViewModel(application: Application) : AndroidViewModel(applicati
             val allApps = _installedApps.value.ifEmpty {
                 repository.getInstalledApps().also { _installedApps.value = it }
             }
-            val appsToCheck = if (_includeSystemApps.value) {
-                allApps
-            } else {
-                allApps.filterNot(InstalledApp::isSystemApp)
-            }
+            val appsToCheck = allApps
+                .let { apps ->
+                    if (_includeSystemApps.value) apps else apps.filterNot(InstalledApp::isSystemApp)
+                }
+                .let { apps ->
+                    if (_includeDisabledApps.value) apps else apps.filter(InstalledApp::isEnabled)
+                }
 
             repository.scanForUpdates(appsToCheck).collect { status ->
                 _scanStatus.value = status
@@ -73,6 +77,13 @@ class ApkUpdaterViewModel(application: Application) : AndroidViewModel(applicati
         if (_includeSystemApps.value == include) return
         _includeSystemApps.value = include
         preferences.includeSystemApps = include
+        scanForUpdates()
+    }
+
+    fun setIncludeDisabledApps(include: Boolean) {
+        if (_includeDisabledApps.value == include) return
+        _includeDisabledApps.value = include
+        preferences.includeDisabledApps = include
         scanForUpdates()
     }
 

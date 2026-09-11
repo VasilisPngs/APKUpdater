@@ -26,7 +26,7 @@ import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.ArrowForward
+import androidx.compose.material.icons.rounded.ArrowDownward
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.Home
 import androidx.compose.material.icons.rounded.Search
@@ -83,6 +83,7 @@ fun ApkUpdaterScreen(
     val updates by viewModel.updates.collectAsStateWithLifecycle()
     val searchQuery by viewModel.searchQuery.collectAsStateWithLifecycle()
     val includeSystemApps by viewModel.includeSystemApps.collectAsStateWithLifecycle()
+    val includeDisabledApps by viewModel.includeDisabledApps.collectAsStateWithLifecycle()
     var selectedTab by remember { mutableIntStateOf(AppTab.Home.ordinal) }
     val homeListState = rememberLazyListState()
     val searchListState = rememberLazyListState()
@@ -179,7 +180,9 @@ fun ApkUpdaterScreen(
                     .padding(innerPadding)
                     .navigationBarsPadding(),
                 includeSystemApps = includeSystemApps,
-                onIncludeSystemAppsChange = viewModel::setIncludeSystemApps
+                onIncludeSystemAppsChange = viewModel::setIncludeSystemApps,
+                includeDisabledApps = includeDisabledApps,
+                onIncludeDisabledAppsChange = viewModel::setIncludeDisabledApps
             )
         }
     }
@@ -359,33 +362,28 @@ private fun AppListItem(
                         )
                     }
 
-                    Spacer(Modifier.size(16.dp))
+                    Spacer(Modifier.size(4.dp))
+                    Text(
+                        text = "v${app.versionName} (${app.versionCode})",
+                        style = MaterialTheme.typography.bodyLarge,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis
+                    )
 
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
+                    if (update != null) {
+                        Icon(
+                            imageVector = Icons.Rounded.ArrowDownward,
+                            contentDescription = "Update available",
+                            modifier = Modifier
+                                .padding(vertical = 4.dp)
+                                .size(22.dp)
+                        )
                         Text(
-                            text = "v${app.versionName} (${app.versionCode})",
+                            text = "v${update.newVersionName} (${update.newVersionCode})",
                             style = MaterialTheme.typography.bodyLarge,
                             maxLines = 2,
                             overflow = TextOverflow.Ellipsis
                         )
-                        if (update != null) {
-                            Icon(
-                                imageVector = Icons.Rounded.ArrowForward,
-                                contentDescription = "Update available",
-                                modifier = Modifier
-                                    .padding(horizontal = 10.dp)
-                                    .size(22.dp)
-                            )
-                            Text(
-                                text = "v${update.newVersionName} (${update.newVersionCode})",
-                                style = MaterialTheme.typography.bodyLarge,
-                                maxLines = 2,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                        }
                     }
                 }
             }
@@ -432,7 +430,9 @@ private fun AppIconImage(
 private fun SettingsContent(
     modifier: Modifier,
     includeSystemApps: Boolean,
-    onIncludeSystemAppsChange: (Boolean) -> Unit
+    onIncludeSystemAppsChange: (Boolean) -> Unit,
+    includeDisabledApps: Boolean,
+    onIncludeDisabledAppsChange: (Boolean) -> Unit
 ) {
     Column(modifier) {
         ListItem(
@@ -440,6 +440,13 @@ private fun SettingsContent(
             supportingContent = { Text("Include pre-installed system applications") },
             trailingContent = {
                 Switch(checked = includeSystemApps, onCheckedChange = onIncludeSystemAppsChange)
+            }
+        )
+        ListItem(
+            headlineContent = { Text("Disabled apps") },
+            supportingContent = { Text("Include disabled applications when checking for updates") },
+            trailingContent = {
+                Switch(checked = includeDisabledApps, onCheckedChange = onIncludeDisabledAppsChange)
             }
         )
         Spacer(Modifier.size(8.dp))

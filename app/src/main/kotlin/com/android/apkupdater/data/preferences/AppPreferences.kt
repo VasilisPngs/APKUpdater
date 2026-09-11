@@ -9,7 +9,12 @@ class AppPreferences(context: Context) {
         get() = preferences.getBoolean(KEY_INCLUDE_SYSTEM_APPS, false)
         set(value) = preferences.edit().putBoolean(KEY_INCLUDE_SYSTEM_APPS, value).apply()
 
+    var includeDisabledApps: Boolean
+        get() = preferences.getBoolean(KEY_INCLUDE_DISABLED_APPS, false)
+        set(value) = preferences.edit().putBoolean(KEY_INCLUDE_DISABLED_APPS, value).apply()
+
     companion object {
         private const val KEY_INCLUDE_SYSTEM_APPS = "include_system_apps"
+        private const val KEY_INCLUDE_DISABLED_APPS = "include_disabled_apps"
     }
 }
