@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -181,7 +182,7 @@ private fun HomeContent(
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
                 contentPadding = PaddingValues(start = 16.dp, top = 8.dp, end = 16.dp, bottom = 16.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
+                verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 items(apps, key = { it.packageName }) { app ->
                     val update = updates.first { it.packageName == app.packageName }
@@ -233,7 +234,7 @@ private fun SearchContent(
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
                 contentPadding = PaddingValues(start = 16.dp, top = 8.dp, end = 16.dp, bottom = 16.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
+                verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 items(apps, key = { it.packageName }) { app ->
                     AppListItem(
@@ -299,16 +300,16 @@ private fun AppListItem(
 ) {
     OutlinedCard(
         modifier = Modifier.fillMaxWidth(),
-        shape = MaterialTheme.shapes.medium
+        shape = MaterialTheme.shapes.large
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp),
+                .padding(20.dp),
             verticalAlignment = Alignment.Top
         ) {
-            AppIconImage(app.packageName, Modifier.size(56.dp))
-            Spacer(Modifier.width(16.dp))
+            AppIconImage(app.packageName, Modifier.size(64.dp))
+            Spacer(Modifier.width(20.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -317,59 +318,51 @@ private fun AppListItem(
                     Text(
                         text = app.appName,
                         modifier = Modifier.weight(1f),
-                        maxLines = 2,
+                        maxLines = 3,
                         overflow = TextOverflow.Ellipsis,
                         style = MaterialTheme.typography.titleMedium
                     )
-                    Spacer(Modifier.width(16.dp))
+                    Spacer(Modifier.width(20.dp))
                     Text(
                         text = if (app.isSystemApp) "System" else "User",
                         style = MaterialTheme.typography.labelMedium
                     )
                 }
 
-                Spacer(Modifier.size(12.dp))
+                Spacer(Modifier.size(16.dp))
 
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    if (update != null) {
-                        Row(
-                            modifier = Modifier.weight(1f),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(
-                                text = "v${app.versionName} (${app.versionCode})",
-                                style = MaterialTheme.typography.bodyMedium,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
+                    Row(
+                        modifier = Modifier.weight(1f),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "v${app.versionName} (${app.versionCode})",
+                            style = MaterialTheme.typography.bodyLarge,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        if (update != null) {
                             Icon(
                                 imageVector = Icons.Rounded.ArrowForward,
                                 contentDescription = "Update available",
                                 modifier = Modifier
-                                    .padding(horizontal = 8.dp)
-                                    .size(20.dp)
+                                    .padding(horizontal = 10.dp)
+                                    .size(22.dp)
                             )
                             Text(
                                 text = "v${update.newVersionName} (${update.newVersionCode})",
-                                style = MaterialTheme.typography.bodyMedium,
+                                style = MaterialTheme.typography.bodyLarge,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis
                             )
                         }
-                    } else {
-                        Text(
-                            text = "v${app.versionName} (${app.versionCode})",
-                            modifier = Modifier.weight(1f),
-                            style = MaterialTheme.typography.bodyMedium,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
                     }
 
-                    Spacer(Modifier.width(12.dp))
+                    Spacer(Modifier.width(16.dp))
 
                     FilledTonalButton(
                         onClick = onOpenApkMirror,
