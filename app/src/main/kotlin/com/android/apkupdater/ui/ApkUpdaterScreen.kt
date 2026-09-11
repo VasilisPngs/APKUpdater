@@ -13,7 +13,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -26,7 +25,7 @@ import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.ArrowDownward
+import androidx.compose.material.icons.rounded.ArrowForward
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.Home
 import androidx.compose.material.icons.rounded.Search
@@ -93,6 +92,7 @@ fun ApkUpdaterScreen(
     val selectedAppTab = AppTab.entries[selectedTab]
     val visibleApps = installedApps
         .filter { includeSystemApps || !it.isSystemApp }
+        .filter { includeDisabledApps || it.isEnabled }
         .filter { app ->
             searchQuery.isBlank() ||
                 app.appName.contains(searchQuery, ignoreCase = true) ||
@@ -372,11 +372,12 @@ private fun AppListItem(
 
                     if (update != null) {
                         Icon(
-                            imageVector = Icons.Rounded.ArrowDownward,
+                            imageVector = Icons.Rounded.ArrowForward,
                             contentDescription = "Update available",
                             modifier = Modifier
                                 .padding(vertical = 4.dp)
                                 .size(22.dp)
+                                .rotate(90f)
                         )
                         Text(
                             text = "v${update.newVersionName} (${update.newVersionCode})",
