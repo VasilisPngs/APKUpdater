@@ -79,7 +79,6 @@ fun ApkUpdaterScreen(
     val selectedFilter by viewModel.selectedFilter.collectAsStateWithLifecycle()
     val searchQuery by viewModel.searchQuery.collectAsStateWithLifecycle()
     val includeSystemApps by viewModel.includeSystemApps.collectAsStateWithLifecycle()
-    val onlyStable by viewModel.onlyStable.collectAsStateWithLifecycle()
     var showSettings by remember { mutableStateOf(false) }
 
     val isScanning = scanStatus is ScanStatus.Scanning
@@ -235,9 +234,7 @@ fun ApkUpdaterScreen(
         ModalBottomSheet(onDismissRequest = { showSettings = false }) {
             SettingsContent(
                 includeSystemApps = includeSystemApps,
-                onlyStable = onlyStable,
                 onIncludeSystemAppsChange = viewModel::setIncludeSystemApps,
-                onOnlyStableChange = viewModel::setOnlyStable,
                 onClose = { showSettings = false }
             )
         }
@@ -375,9 +372,7 @@ private fun AppIconImage(
 @Composable
 private fun SettingsContent(
     includeSystemApps: Boolean,
-    onlyStable: Boolean,
     onIncludeSystemAppsChange: (Boolean) -> Unit,
-    onOnlyStableChange: (Boolean) -> Unit,
     onClose: () -> Unit
 ) {
     Column(Modifier.navigationBarsPadding()) {
@@ -386,13 +381,6 @@ private fun SettingsContent(
             supportingContent = { Text("APKMirror update checks") }
         )
         androidx.compose.material3.HorizontalDivider()
-        ListItem(
-            headlineContent = { Text("Stable releases only") },
-            supportingContent = { Text("Exclude alpha and beta releases") },
-            trailingContent = {
-                Switch(checked = onlyStable, onCheckedChange = onOnlyStableChange)
-            }
-        )
         ListItem(
             headlineContent = { Text("System apps") },
             supportingContent = { Text("Include pre-installed system applications") },
