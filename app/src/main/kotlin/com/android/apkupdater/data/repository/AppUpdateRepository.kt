@@ -47,7 +47,9 @@ class AppUpdateRepository(
 
     suspend fun getInstalledApps(includeSystem: Boolean = true): List<InstalledApp> = withContext(Dispatchers.IO) {
         val packages = packageManager.getInstalledPackages(
-            PackageManager.PackageInfoFlags.of(PackageManager.GET_SIGNING_CERTIFICATES.toLong())
+            PackageManager.PackageInfoFlags.of(
+                (PackageManager.GET_SIGNING_CERTIFICATES or PackageManager.MATCH_DISABLED_COMPONENTS).toLong()
+            )
         )
 
         packages.mapNotNull { pkg ->
