@@ -30,7 +30,11 @@ class GooglePlayInstaller(private val context: Context) {
             require(aasToken.isNotBlank()) { "Google Play AAS token is required." }
 
             onState(InstallState.Preparing(app.appName))
-            val authData = AuthHelper.build(email.trim(), aasToken.trim())
+            val authData = AuthHelper.build(
+                email = email.trim(),
+                token = aasToken.trim(),
+                tokenType = AuthHelper.Token.AAS
+            )
             val details = AppDetailsHelper(authData).getAppByPackageName(app.packageName)
 
             if (versionCode <= app.versionCode) {
@@ -66,7 +70,7 @@ class GooglePlayInstaller(private val context: Context) {
         val apkFiles = files.filter { it.type == PlayFile.Type.BASE || it.type == PlayFile.Type.SPLIT }
         require(apkFiles.isNotEmpty()) { "Google Play returned no installable APK files." }
 
-        val directory = File(context.cacheDir, "play_$packageName_$versionCode").apply {
+        val directory = File(context.cacheDir, "play_${packageName}_$versionCode").apply {
             deleteRecursively()
             mkdirs()
         }
@@ -117,8 +121,9 @@ class GooglePlayInstaller(private val context: Context) {
 
     private fun extractDependentLibraries(appDetails: Any): List<Pair<String, Long>> {
         val dependencies = readProperty(appDetails, "dependencies") ?: return emptyList()
-        val libraries = readProperty(dependencies, "dependentLibraries") as? Iterable<*> ?: return emptyList()
-        return libraries.mapNotNull { library ->
+        val libraries = (readProperty(dependencies, "dependentLibraries") as? Iterable<*>)
+            ?: return emptyList()
+        return libraries.filterNotNull().mapNotNull { library ->
             val packageName = readProperty(library, "packageName") as? String
             val versionCode = when (val value = readProperty(library, "versionCode")) {
                 is Number -> value.toLong()
