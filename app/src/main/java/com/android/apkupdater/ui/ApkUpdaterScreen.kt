@@ -111,10 +111,7 @@ fun ApkUpdaterScreen(
             CenterAlignedTopAppBar(
                 title = { Text("APKUpdater") },
                 actions = {
-                    IconButton(
-                        onClick = viewModel::scanForUpdates,
-                        enabled = !isScanning
-                    ) {
+                    IconButton(onClick = viewModel::scanForUpdates, enabled = !isScanning) {
                         if (isScanning) {
                             CircularProgressIndicator(modifier = Modifier.size(24.dp))
                         } else {
@@ -201,7 +198,7 @@ fun ApkUpdaterScreen(
                     LazyColumn(
                         modifier = Modifier.fillMaxSize(),
                         contentPadding = PaddingValues(start = 16.dp, top = 8.dp, end = 16.dp, bottom = 16.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
                         items(filteredUpdates, key = { it.packageName }) { update ->
                             UpdateListItem(
@@ -217,7 +214,7 @@ fun ApkUpdaterScreen(
                 LazyColumn(
                     modifier = Modifier.fillMaxSize(),
                     contentPadding = PaddingValues(start = 16.dp, top = 8.dp, end = 16.dp, bottom = 16.dp),
-                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     items(filteredApps, key = { it.packageName }) { app ->
                         InstalledAppListItem(
@@ -270,9 +267,7 @@ private fun ScanStatusSection(
         }
         is ScanStatus.Success -> {
             ListItem(
-                leadingContent = {
-                    Icon(Icons.Default.CheckCircle, contentDescription = null)
-                },
+                leadingContent = { Icon(Icons.Default.CheckCircle, contentDescription = null) },
                 headlineContent = {
                     Text(if (updatesCount > 0) "$updatesCount updates available" else "All apps are up to date")
                 },
@@ -328,30 +323,32 @@ private fun InstalledAppListItem(
     hasUpdate: Boolean,
     onOpenApkMirror: () -> Unit
 ) {
-    ListItem(
-        leadingContent = { AppIconImage(app.packageName, Modifier.size(48.dp)) },
-        headlineContent = {
-            Text(app.appName, maxLines = 1, overflow = TextOverflow.Ellipsis)
-        },
-        supportingContent = {
-            Text(
-                buildString {
-                    append("v${app.versionName} (${app.versionCode})")
-                    if (app.isSystemApp) append(" · System")
-                    if (hasUpdate) append(" · Update available")
-                },
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-        },
-        trailingContent = {
-            OutlinedButton(onClick = onOpenApkMirror) {
-                Icon(Icons.Default.Search, contentDescription = null)
-                Spacer(Modifier.width(8.dp))
-                Text("APKMirror")
+    Card(modifier = Modifier.fillMaxWidth()) {
+        ListItem(
+            leadingContent = { AppIconImage(app.packageName, Modifier.size(48.dp)) },
+            headlineContent = {
+                Text(app.appName, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            },
+            supportingContent = {
+                Text(
+                    buildString {
+                        append("v${app.versionName} (${app.versionCode})")
+                        if (app.isSystemApp) append(" · System")
+                        if (hasUpdate) append(" · Update available")
+                    },
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            },
+            trailingContent = {
+                OutlinedButton(onClick = onOpenApkMirror) {
+                    Icon(Icons.Default.Search, contentDescription = null)
+                    Spacer(Modifier.width(8.dp))
+                    Text("APKMirror")
+                }
             }
-        }
-    )
+        )
+    }
 }
 
 @Composable
