@@ -4,7 +4,7 @@ import android.content.Context
 import com.android.apkupdater.data.model.InstalledApp
 import com.android.apkupdater.data.model.InstallState
 import com.aurora.gplayapi.data.models.AuthData
-import com.aurora.gplayapi.data.models.File as PlayFile
+import com.aurora.gplayapi.data.models.PlayFile
 import com.aurora.gplayapi.helpers.AppDetailsHelper
 import com.aurora.gplayapi.helpers.AuthHelper
 import com.aurora.gplayapi.helpers.PurchaseHelper
@@ -27,12 +27,15 @@ class GooglePlayInstaller(context: Context) {
         onState: (InstallState) -> Unit
     ): Result<Unit> = withContext(Dispatchers.IO) {
         runCatching {
+            require(versionCode > app.versionCode) {
+                "The requested version is not newer than the installed version."
+            }
             onState(InstallState.Preparing(app.appName))
 
-            val oauthToken = tokenProvider.fetchPlayAuthToken(accountEmail)
+            val playAuthToken = tokenProvider.fetchPlayAuthToken(accountEmail)
             val authData = AuthHelper.build(
                 email = accountEmail,
-                token = oauthToken,
+                token = playAuthToken,
                 tokenType = AuthHelper.Token.AAS
             )
             installPackage(
@@ -66,18 +69,11 @@ class GooglePlayInstaller(context: Context) {
             throw IllegalStateException("Circular Google Play dependency detected for $packageName.")
         }
 
-        val app = AppDetailsHelper
-            .with(authData)
-            .getAppByPackageName(packageName)
-
+        val app = AppDetailsHelper.with(authData).getAppByPackageName(packageName)
         app.dependencies.dependentLibraries.forEach { dependency ->
             val installedVersion = runCatching {
-                context.packageManager.getPackageInfo(
-                    dependency.packageName,
-                    0
-                ).longVersionCode
+                context.packageManager.getPackageInfo(dependency.packageName, 0).longVersionCode
             }.getOrDefault(0L)
-
             if (installedVersion < dependency.versionCode) {
                 installPackage(
                     authData = authData,
@@ -92,8 +88,7 @@ class GooglePlayInstaller(context: Context) {
         }
 
         onState(InstallState.Downloading(displayName))
-        val playFiles = PurchaseHelper
-            .with(authData)
+        val playFiles = PurchaseHelper.with(authData)
             .purchase(packageName, versionCode.toInt(), app.offerType)
             .filter { it.url.isNotBlank() && it.name.endsWith(".apk", ignoreCase = true) }
 
@@ -102,14 +97,8 @@ class GooglePlayInstaller(context: Context) {
         }
 
         val apkFiles = playFiles.map { download(it, packageName, versionCode) }
-        apkFiles.forEach { file ->
-            onState(InstallState.Installing(displayName, installingDependency))
-        }
-        packageInstaller.install(
-            packageName = packageName,
-            apkFiles = apkFiles
-        ).getOrThrow()
-
+        onState(InstallState.Installing(displayName, installingDependency))
+        packageInstaller.install(packageName, apkFiles).getOrThrow()
         visiting.remove(packageName)
     }
 
