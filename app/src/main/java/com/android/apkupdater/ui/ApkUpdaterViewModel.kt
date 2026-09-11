@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import com.android.apkupdater.data.model.AppFilter
 import com.android.apkupdater.data.model.AppUpdateInfo
 import com.android.apkupdater.data.model.InstalledApp
+import com.android.apkupdater.data.preferences.AppPreferences
 import com.android.apkupdater.data.repository.AppUpdateRepository
 import com.android.apkupdater.data.repository.ScanStatus
 import kotlinx.coroutines.Job
@@ -16,13 +17,13 @@ import kotlinx.coroutines.launch
 
 class ApkUpdaterViewModel(application: Application) : AndroidViewModel(application) {
     private val repository = AppUpdateRepository(application.applicationContext)
+    private val preferences = AppPreferences(application.applicationContext)
     private val _scanStatus = MutableStateFlow<ScanStatus>(ScanStatus.Idle)
     private val _installedApps = MutableStateFlow<List<InstalledApp>>(emptyList())
     private val _updates = MutableStateFlow<List<AppUpdateInfo>>(emptyList())
     private val _selectedFilter = MutableStateFlow(AppFilter.UPDATES_ONLY)
     private val _searchQuery = MutableStateFlow("")
-    private val _includeSystemApps = MutableStateFlow(false)
-    private val _onlyStable = MutableStateFlow(true)
+    private val _includeSystemApps = MutableStateFlow(preferences.includeSystemApps)
     private var scanJob: Job? = null
 
     val scanStatus: StateFlow<ScanStatus> = _scanStatus.asStateFlow()
@@ -31,7 +32,6 @@ class ApkUpdaterViewModel(application: Application) : AndroidViewModel(applicati
     val selectedFilter: StateFlow<AppFilter> = _selectedFilter.asStateFlow()
     val searchQuery: StateFlow<String> = _searchQuery.asStateFlow()
     val includeSystemApps: StateFlow<Boolean> = _includeSystemApps.asStateFlow()
-    val onlyStable: StateFlow<Boolean> = _onlyStable.asStateFlow()
 
     init {
         loadInstalledApps(autoScan = true)
@@ -57,7 +57,7 @@ class ApkUpdaterViewModel(application: Application) : AndroidViewModel(applicati
                 allApps.filterNot(InstalledApp::isSystemApp)
             }
 
-            repository.scanForUpdates(appsToCheck, _onlyStable.value).collect { status ->
+            repository.scanForUpdates(appsToCheck).collect { status ->
                 _scanStatus.value = status
                 when (status) {
                     is ScanStatus.Success -> _updates.value = status.updates
@@ -79,12 +79,7 @@ class ApkUpdaterViewModel(application: Application) : AndroidViewModel(applicati
     fun setIncludeSystemApps(include: Boolean) {
         if (_includeSystemApps.value == include) return
         _includeSystemApps.value = include
-        scanForUpdates()
-    }
-
-    fun setOnlyStable(onlyStable: Boolean) {
-        if (_onlyStable.value == onlyStable) return
-        _onlyStable.value = onlyStable
+        preferences.includeSystemApps = include
         scanForUpdates()
     }
 
