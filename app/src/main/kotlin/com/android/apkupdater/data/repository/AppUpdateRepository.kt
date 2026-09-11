@@ -3,6 +3,7 @@ package com.android.apkupdater.data.repository
 import android.content.Context
 import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
+import android.content.pm.SigningInfo
 import android.os.Build
 import com.android.apkupdater.data.api.ApkMirrorPageService
 import com.android.apkupdater.data.api.ApkMirrorService
@@ -20,9 +21,11 @@ import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.withContext
 import java.security.MessageDigest
-import java.time.format.DateTimeFormatterBuilder
+import java.time.LocalDateTime
 import java.time.ZoneOffset
+import java.time.format.DateTimeFormatterBuilder
 import java.util.Locale
+import java.util.concurrent.ConcurrentHashMap
 
 sealed interface ScanStatus {
     data object Idle : ScanStatus
@@ -39,46 +42,31 @@ class AppUpdateRepository(
     private val packageManager = context.packageManager
     private val isAndroidTv = packageManager.hasSystemFeature(PackageManager.FEATURE_LEANBACK)
     private val deviceAbis = Build.SUPPORTED_ABIS.map(String::lowercase).toSet()
-    private val deviceArch = when {
-        deviceAbis.any { it == "x86" || it == "x86_64" } -> "x86"
-        deviceAbis.any { it == "armeabi-v7a" || it == "arm64-v8a" } -> "arm"
-        else -> "arm"
-    }
+    private val uploadedAtCache = ConcurrentHashMap<String, Long>()
 
-    suspend fun getInstalledApps(includeSystem: Boolean = true): List<InstalledApp> = withContext(Dispatchers.IO) {
-        val packages = packageManager.getInstalledPackages(
+    suspend fun getInstalledApps(): List<InstalledApp> = withContext(Dispatchers.IO) {
+        packageManager.getInstalledPackages(
             PackageManager.PackageInfoFlags.of(
                 (PackageManager.GET_SIGNING_CERTIFICATES or PackageManager.MATCH_DISABLED_COMPONENTS).toLong()
             )
-        )
-
-        packages.mapNotNull { pkg ->
+        ).mapNotNull { packageInfo ->
             runCatching {
-                val appInfo = pkg.applicationInfo ?: return@mapNotNull null
+                val appInfo = packageInfo.applicationInfo ?: return@mapNotNull null
                 val isSystem = (appInfo.flags and ApplicationInfo.FLAG_SYSTEM) != 0 ||
                     (appInfo.flags and ApplicationInfo.FLAG_UPDATED_SYSTEM_APP) != 0
-                if (!includeSystem && isSystem) return@mapNotNull null
-
-                val signatureSha1 = pkg.signingInfo?.apkContentsSigners
-                    ?.firstOrNull()
-                    ?.let { signer ->
-                        MessageDigest.getInstance("SHA-1")
-                            .digest(signer.toByteArray())
-                            .joinToString("") { byte -> "%02x".format(byte.toInt() and 0xff) }
-                    }
-                    .orEmpty()
 
                 InstalledApp(
-                    packageName = pkg.packageName,
-                    appName = appInfo.loadLabel(packageManager).toString().trim().ifEmpty { pkg.packageName },
-                    versionName = pkg.versionName ?: "Unknown",
-                    versionCode = pkg.longVersionCode,
-                    signatureSha1 = signatureSha1,
+                    packageName = packageInfo.packageName,
+                    appName = appInfo.loadLabel(packageManager).toString().trim()
+                        .ifEmpty { packageInfo.packageName },
+                    versionName = packageInfo.versionName ?: "Unknown",
+                    versionCode = packageInfo.longVersionCode,
+                    signatureSha1s = packageInfo.signingInfo.sha1Signatures(),
                     isSystemApp = isSystem,
                     isEnabled = appInfo.enabled
                 )
             }.getOrNull()
-        }.sortedWith(compareBy({ it.isSystemApp }, { it.appName.lowercase() }))
+        }.sortedBy { it.appName.lowercase() }
     }
 
     fun scanForUpdates(appsToCheck: List<InstalledApp>): Flow<ScanStatus> = flow {
@@ -87,8 +75,7 @@ class AppUpdateRepository(
             return@flow
         }
 
-        val exclude = listOf("alpha", "beta")
-        val batches = appsToCheck.chunked(100)
+        val batches = appsToCheck.chunked(API_BATCH_SIZE)
         val updates = mutableListOf<AppUpdateInfo>()
         var processed = 0
         var failedBatches = 0
@@ -97,48 +84,59 @@ class AppUpdateRepository(
 
         for (batch in batches) {
             emit(ScanStatus.Scanning(processed, appsToCheck.size, batch.first().appName))
+
             try {
                 val response = service.appExists(
-                    AppExistsRequest(batch.map(InstalledApp::packageName), exclude)
+                    AppExistsRequest(
+                        pnames = batch.map(InstalledApp::packageName),
+                        exclude = STABLE_RELEASE_EXCLUSIONS
+                    )
                 )
                 updates += parseUpdates(response.data, batch)
             } catch (_: Exception) {
                 failedBatches++
             }
+
             processed += batch.size
             emit(ScanStatus.Scanning(processed, appsToCheck.size, batch.last().appName))
         }
 
-        val timestampedUpdates = enrichWithApkMirrorUploadTimes(updates)
-
+        val enrichedUpdates = enrichWithApkMirrorUploadTimes(updates)
         when {
-            failedBatches == batches.size -> emit(ScanStatus.Error("Unable to reach APKMirror.", timestampedUpdates))
-            failedBatches > 0 -> emit(ScanStatus.Error("Some applications could not be checked.", timestampedUpdates))
-            else -> emit(ScanStatus.Success(timestampedUpdates))
+            failedBatches == batches.size -> {
+                emit(ScanStatus.Error("Unable to reach APKMirror.", enrichedUpdates))
+            }
+            failedBatches > 0 -> {
+                emit(ScanStatus.Error("Some applications could not be checked.", enrichedUpdates))
+            }
+            else -> emit(ScanStatus.Success(enrichedUpdates))
         }
     }.flowOn(Dispatchers.IO)
 
     private suspend fun enrichWithApkMirrorUploadTimes(
         updates: List<AppUpdateInfo>
     ): List<AppUpdateInfo> = coroutineScope {
-        updates.map { update ->
-            async {
-                update.copy(apkMirrorUploadedAt = fetchApkMirrorUploadTime(update.apkMirrorUrl))
-            }
-        }.awaitAll()
+        updates.chunked(PAGE_CONCURRENCY).flatMap { chunk ->
+            chunk.map { update ->
+                async {
+                    val uploadedAt = uploadedAtCache[update.apkMirrorUrl]
+                        ?: fetchApkMirrorUploadTime(update.apkMirrorUrl)?.also {
+                            uploadedAtCache[update.apkMirrorUrl] = it
+                        }
+                    update.copy(apkMirrorUploadedAt = uploadedAt)
+                }
+            }.awaitAll()
+        }
     }
 
     private suspend fun fetchApkMirrorUploadTime(url: String): Long? = runCatching {
         val html = pageService.getReleasePage(url).string()
-        val match = Regex(
-            "Uploaded:\\s*([A-Za-z]+\\s+\\d{1,2},\\s+\\d{4}\\s+at\\s+\\d{1,2}:\\d{2}(?:AM|PM)\\s+UTC)"
-        ).find(html)
-        match?.groupValues?.get(1)?.let { value ->
+        UPLOADED_AT_PATTERN.find(html)?.groupValues?.get(1)?.let { value ->
             runCatching {
                 DateTimeFormatterBuilder()
                     .appendPattern("MMMM d, uuuu 'at' h:mma 'UTC'")
                     .toFormatter(Locale.US)
-                    .parse(value, java.time.LocalDateTime::from)
+                    .parse(value, LocalDateTime::from)
                     .toInstant(ZoneOffset.UTC)
                     .toEpochMilli()
             }.getOrNull()
@@ -149,35 +147,31 @@ class AppUpdateRepository(
         apiDataList: List<AppExistsResponseData>,
         installedBatch: List<InstalledApp>
     ): List<AppUpdateInfo> {
-        val appMap = installedBatch.associateBy(InstalledApp::packageName)
+        val installedByPackage = installedBatch.associateBy(InstalledApp::packageName)
 
         return apiDataList.asSequence()
             .filter { it.exists == true }
             .mapNotNull { data ->
-                val installed = appMap[data.pname] ?: return@mapNotNull null
+                val installed = installedByPackage[data.pname] ?: return@mapNotNull null
                 val release = data.release ?: return@mapNotNull null
-
                 val bestApk = data.apks.asSequence()
-                    .filter { apk -> filterSignature(apk, installed.signatureSha1) }
-                    .filter(::filterArch)
-                    .filter(::filterMinApi)
+                    .filter { apk -> filterSignature(apk, installed.signatureSha1s) }
+                    .filter(::filterArchitecture)
+                    .filter(::filterMinimumApi)
                     .filter(::filterAndroidTv)
                     .filter(::filterWearOs)
-                    .filter { apk -> apk.versionCode > installed.versionCode }
+                    .filter { it.versionCode > installed.versionCode }
                     .maxByOrNull(AppExistsApk::versionCode)
                     ?: return@mapNotNull null
 
-                val link = bestApk.link
-                val url = if (link.startsWith("http://") || link.startsWith("https://")) {
-                    link
-                } else {
-                    "https://www.apkmirror.com$link"
-                }
+                val url = bestApk.link.toAbsoluteApkMirrorUrl()
+                if (url.isBlank()) return@mapNotNull null
 
                 AppUpdateInfo(
                     packageName = installed.packageName,
                     appName = installed.appName,
                     currentVersionName = installed.versionName,
+                    currentVersionCode = installed.versionCode,
                     newVersionName = release.version.orEmpty(),
                     newVersionCode = bestApk.versionCode,
                     whatsNew = release.whatsNew,
@@ -187,18 +181,19 @@ class AppUpdateRepository(
             .toList()
     }
 
-    private fun filterSignature(apk: AppExistsApk, installedSignatureSha1: String): Boolean {
+    private fun filterSignature(apk: AppExistsApk, installedSignatures: Set<String>): Boolean {
         val signatures = apk.signaturesSha1.orEmpty()
-        return signatures.isEmpty() || signatures.any {
-            it.equals(installedSignatureSha1, ignoreCase = true)
-        }
+        return signatures.isEmpty() || signatures.any { it in installedSignatures }
     }
 
-    private fun filterArch(apk: AppExistsApk): Boolean {
+    private fun filterArchitecture(apk: AppExistsApk): Boolean {
         if (apk.arches.isEmpty()) return true
         val arches = apk.arches.map(String::lowercase)
         if (arches.any { it == "universal" || it == "noarch" }) return true
-        return arches.any { it in deviceAbis || it.contains(deviceArch) }
+        return arches.any { arch ->
+            arch in deviceAbis ||
+                (arch == "arm" && deviceAbis.any { it == "armeabi-v7a" || it == "arm64-v8a" })
+        }
     }
 
     private fun filterAndroidTv(apk: AppExistsApk): Boolean {
@@ -213,8 +208,39 @@ class AppUpdateRepository(
     private fun filterWearOs(apk: AppExistsApk): Boolean =
         !apk.capabilities.orEmpty().contains("wear_standalone")
 
-    private fun filterMinApi(apk: AppExistsApk): Boolean = apk.minapi
+    private fun filterMinimumApi(apk: AppExistsApk): Boolean = apk.minapi
         ?.toIntOrNull()
         ?.let { it <= Build.VERSION.SDK_INT }
         ?: true
+
+    private fun SigningInfo?.sha1Signatures(): Set<String> = this
+        ?.let { signingInfo ->
+            val certificates = if (signingInfo.hasMultipleSigners()) {
+                signingInfo.apkContentsSigners.toList()
+            } else {
+                signingInfo.signingCertificateHistory.toList()
+            }
+            certificates.mapTo(mutableSetOf()) { certificate -> certificate.sha1() }
+        }
+        ?: emptySet()
+
+    private fun android.content.pm.Signature.sha1(): String =
+        MessageDigest.getInstance("SHA-1")
+            .digest(toByteArray())
+            .joinToString("") { byte -> "%02x".format(byte.toInt() and 0xff) }
+
+    private fun String.toAbsoluteApkMirrorUrl(): String = when {
+        startsWith("https://") || startsWith("http://") -> this
+        startsWith("/") -> "https://www.apkmirror.com$this"
+        else -> "https://www.apkmirror.com/$this"
+    }
+
+    private companion object {
+        const val API_BATCH_SIZE = 100
+        const val PAGE_CONCURRENCY = 4
+        val STABLE_RELEASE_EXCLUSIONS = listOf("alpha", "beta")
+        val UPLOADED_AT_PATTERN = Regex(
+            "Uploaded:\\s*([A-Za-z]+\\s+\\d{1,2},\\s+\\d{4}\\s+at\\s+\\d{1,2}:\\d{2}(?:AM|PM)\\s+UTC)"
+        )
+    }
 }

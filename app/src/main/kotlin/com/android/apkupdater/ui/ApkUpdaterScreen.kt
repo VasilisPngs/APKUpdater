@@ -13,9 +13,11 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -25,7 +27,6 @@ import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.ArrowForward
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.Home
 import androidx.compose.material.icons.rounded.Search
@@ -77,57 +78,64 @@ fun ApkUpdaterScreen(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
-    val scanStatus by viewModel.scanStatus.collectAsStateWithLifecycle()
-    val installedApps by viewModel.installedApps.collectAsStateWithLifecycle()
-    val updates by viewModel.updates.collectAsStateWithLifecycle()
-    val searchQuery by viewModel.searchQuery.collectAsStateWithLifecycle()
-    val includeSystemApps by viewModel.includeSystemApps.collectAsStateWithLifecycle()
-    val includeDisabledApps by viewModel.includeDisabledApps.collectAsStateWithLifecycle()
-    var selectedTab by remember { mutableIntStateOf(AppTab.Home.ordinal) }
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    var selectedTabIndex by remember { mutableIntStateOf(AppTab.Home.ordinal) }
     val homeListState = rememberLazyListState()
     val searchListState = rememberLazyListState()
     val coroutineScope = rememberCoroutineScope()
 
-    val updateMap = updates.associateBy(AppUpdateInfo::packageName)
-    val selectedAppTab = AppTab.entries[selectedTab]
-    val visibleApps = installedApps
-        .filter { includeSystemApps || !it.isSystemApp }
-        .filter { includeDisabledApps || it.isEnabled }
-        .filter { app ->
-            searchQuery.isBlank() ||
-                app.appName.contains(searchQuery, ignoreCase = true) ||
-                app.packageName.contains(searchQuery, ignoreCase = true)
-        }
-        .sortedBy { it.appName.lowercase() }
-    val appsWithUpdates = visibleApps
-        .filter { updateMap.containsKey(it.packageName) }
-        .sortedWith(
-            compareByDescending<InstalledApp> { updateMap[it.packageName]?.apkMirrorUploadedAt ?: Long.MIN_VALUE }
-                .thenBy { it.appName.lowercase() }
-        )
+    val selectedTab = AppTab.entries[selectedTabIndex]
+    val updateMap = remember(uiState.updates) {
+        uiState.updates.associateBy(AppUpdateInfo::packageName)
+    }
+    val visibleApps = remember(
+        uiState.installedApps,
+        uiState.includeSystemApps,
+        uiState.includeDisabledApps,
+        uiState.searchQuery
+    ) {
+        uiState.installedApps
+            .filter { uiState.includeSystemApps || !it.isSystemApp }
+            .filter { uiState.includeDisabledApps || it.isEnabled }
+            .filter { app ->
+                uiState.searchQuery.isBlank() ||
+                    app.appName.contains(uiState.searchQuery, ignoreCase = true) ||
+                    app.packageName.contains(uiState.searchQuery, ignoreCase = true)
+            }
+            .sortedBy { it.appName.lowercase() }
+    }
+    val appsWithUpdates = remember(visibleApps, updateMap) {
+        visibleApps
+            .filter { updateMap.containsKey(it.packageName) }
+            .sortedWith(
+                compareByDescending<InstalledApp> {
+                    updateMap[it.packageName]?.apkMirrorUploadedAt ?: Long.MIN_VALUE
+                }.thenBy { it.appName.lowercase() }
+            )
+    }
 
     Scaffold(
         modifier = modifier.fillMaxSize(),
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
             CenterAlignedTopAppBar(
-                title = { Text(if (selectedAppTab == AppTab.Home) "APKUpdater" else selectedAppTab.label) }
+                title = { Text(if (selectedTab == AppTab.Home) "APKUpdater" else selectedTab.label) }
             )
         },
         bottomBar = {
             NavigationBar {
                 AppTab.entries.forEach { tab ->
                     NavigationBarItem(
-                        selected = selectedAppTab == tab,
+                        selected = selectedTab == tab,
                         onClick = {
-                            if (selectedAppTab == tab) {
+                            if (selectedTab == tab) {
                                 when (tab) {
                                     AppTab.Home -> coroutineScope.launch { homeListState.animateScrollToItem(0) }
                                     AppTab.Search -> coroutineScope.launch { searchListState.animateScrollToItem(0) }
                                     AppTab.Settings -> Unit
                                 }
                             } else {
-                                selectedTab = tab.ordinal
+                                selectedTabIndex = tab.ordinal
                             }
                         },
                         icon = {
@@ -146,15 +154,14 @@ fun ApkUpdaterScreen(
             }
         }
     ) { innerPadding ->
-        when (selectedAppTab) {
+        when (selectedTab) {
             AppTab.Home -> HomeContent(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(innerPadding),
-                status = scanStatus,
-                updates = updates,
+                status = uiState.scanStatus,
                 apps = appsWithUpdates,
-                appsCount = visibleApps.size,
+                updateMap = updateMap,
                 listState = homeListState,
                 onScanClick = viewModel::scanForUpdates,
                 onOpenApkMirror = { update -> openUrlInBrowser(context, update.apkMirrorUrl) }
@@ -163,7 +170,7 @@ fun ApkUpdaterScreen(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(innerPadding),
-                searchQuery = searchQuery,
+                searchQuery = uiState.searchQuery,
                 onSearchQueryChange = viewModel::setSearchQuery,
                 apps = visibleApps,
                 updateMap = updateMap,
@@ -179,9 +186,9 @@ fun ApkUpdaterScreen(
                     .fillMaxSize()
                     .padding(innerPadding)
                     .navigationBarsPadding(),
-                includeSystemApps = includeSystemApps,
+                includeSystemApps = uiState.includeSystemApps,
                 onIncludeSystemAppsChange = viewModel::setIncludeSystemApps,
-                includeDisabledApps = includeDisabledApps,
+                includeDisabledApps = uiState.includeDisabledApps,
                 onIncludeDisabledAppsChange = viewModel::setIncludeDisabledApps
             )
         }
@@ -192,9 +199,8 @@ fun ApkUpdaterScreen(
 private fun HomeContent(
     modifier: Modifier,
     status: ScanStatus,
-    updates: List<AppUpdateInfo>,
     apps: List<InstalledApp>,
-    appsCount: Int,
+    updateMap: Map<String, AppUpdateInfo>,
     listState: LazyListState,
     onScanClick: () -> Unit,
     onOpenApkMirror: (AppUpdateInfo) -> Unit
@@ -202,11 +208,18 @@ private fun HomeContent(
     Column(modifier = modifier) {
         ScanStatusSection(
             status = status,
-            updatesCount = updates.size,
+            updatesCount = apps.size,
             onScanClick = onScanClick
         )
 
-        if (apps.isNotEmpty()) {
+        if (apps.isEmpty()) {
+            EmptyAppsView(
+                when (status) {
+                    is ScanStatus.Scanning -> "Checking installed apps for updates"
+                    else -> "No updates available"
+                }
+            )
+        } else {
             LazyColumn(
                 state = listState,
                 modifier = Modifier.fillMaxSize(),
@@ -214,12 +227,13 @@ private fun HomeContent(
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 items(apps, key = { it.packageName }) { app ->
-                    val update = updates.first { it.packageName == app.packageName }
-                    AppListItem(
-                        app = app,
-                        update = update,
-                        onOpenApkMirror = { onOpenApkMirror(update) }
-                    )
+                    updateMap[app.packageName]?.let { update ->
+                        AppListItem(
+                            app = app,
+                            update = update,
+                            onOpenApkMirror = { onOpenApkMirror(update) }
+                        )
+                    }
                 }
             }
         }
@@ -355,14 +369,14 @@ private fun AppListItem(
                             overflow = TextOverflow.Ellipsis,
                             style = MaterialTheme.typography.titleMedium
                         )
-                        Spacer(Modifier.width(20.dp))
+                        Spacer(Modifier.width(16.dp))
                         Text(
                             text = if (app.isSystemApp) "System" else "User",
                             style = MaterialTheme.typography.labelMedium
                         )
                     }
 
-                    Spacer(Modifier.size(4.dp))
+                    Spacer(Modifier.height(4.dp))
                     Text(
                         text = "v${app.versionName} (${app.versionCode})",
                         style = MaterialTheme.typography.bodyLarge,
@@ -371,13 +385,10 @@ private fun AppListItem(
                     )
 
                     if (update != null) {
-                        Icon(
-                            imageVector = Icons.Rounded.ArrowForward,
-                            contentDescription = "Update available",
-                            modifier = Modifier
-                                .padding(vertical = 4.dp)
-                                .size(22.dp)
-                                .rotate(90f)
+                        Text(
+                            text = "↓",
+                            modifier = Modifier.padding(vertical = 4.dp),
+                            style = MaterialTheme.typography.titleLarge
                         )
                         Text(
                             text = "v${update.newVersionName} (${update.newVersionCode})",
@@ -389,8 +400,7 @@ private fun AppListItem(
                 }
             }
 
-            Spacer(Modifier.size(16.dp))
-
+            Spacer(Modifier.height(16.dp))
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.End
@@ -450,7 +460,6 @@ private fun SettingsContent(
                 Switch(checked = includeDisabledApps, onCheckedChange = onIncludeDisabledAppsChange)
             }
         )
-        Spacer(Modifier.size(8.dp))
     }
 }
 

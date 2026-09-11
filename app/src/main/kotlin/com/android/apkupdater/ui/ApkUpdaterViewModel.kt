@@ -12,78 +12,90 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+
+data class UpdaterUiState(
+    val scanStatus: ScanStatus = ScanStatus.Idle,
+    val installedApps: List<InstalledApp> = emptyList(),
+    val updates: List<AppUpdateInfo> = emptyList(),
+    val searchQuery: String = "",
+    val includeSystemApps: Boolean = false,
+    val includeDisabledApps: Boolean = false
+)
 
 class ApkUpdaterViewModel(application: Application) : AndroidViewModel(application) {
     private val repository = AppUpdateRepository(application.applicationContext)
     private val preferences = AppPreferences(application.applicationContext)
-    private val _scanStatus = MutableStateFlow<ScanStatus>(ScanStatus.Idle)
-    private val _installedApps = MutableStateFlow<List<InstalledApp>>(emptyList())
-    private val _updates = MutableStateFlow<List<AppUpdateInfo>>(emptyList())
-    private val _searchQuery = MutableStateFlow("")
-    private val _includeSystemApps = MutableStateFlow(preferences.includeSystemApps)
-    private val _includeDisabledApps = MutableStateFlow(preferences.includeDisabledApps)
+    private val _uiState = MutableStateFlow(
+        UpdaterUiState(
+            includeSystemApps = preferences.includeSystemApps,
+            includeDisabledApps = preferences.includeDisabledApps
+        )
+    )
     private var scanJob: Job? = null
 
-    val scanStatus: StateFlow<ScanStatus> = _scanStatus.asStateFlow()
-    val installedApps: StateFlow<List<InstalledApp>> = _installedApps.asStateFlow()
-    val updates: StateFlow<List<AppUpdateInfo>> = _updates.asStateFlow()
-    val searchQuery: StateFlow<String> = _searchQuery.asStateFlow()
-    val includeSystemApps: StateFlow<Boolean> = _includeSystemApps.asStateFlow()
-    val includeDisabledApps: StateFlow<Boolean> = _includeDisabledApps.asStateFlow()
+    val uiState: StateFlow<UpdaterUiState> = _uiState.asStateFlow()
 
     init {
-        loadInstalledApps(autoScan = true)
+        refreshInstalledAppsAndScan()
     }
 
-    fun loadInstalledApps(autoScan: Boolean = false) {
+    fun refreshInstalledAppsAndScan() {
         viewModelScope.launch {
             val apps = repository.getInstalledApps()
-            _installedApps.value = apps
-            if (autoScan) scanForUpdates()
+            _uiState.update { it.copy(installedApps = apps) }
+            scanForUpdates()
         }
     }
 
     fun scanForUpdates() {
         scanJob?.cancel()
         scanJob = viewModelScope.launch {
-            val allApps = _installedApps.value.ifEmpty {
-                repository.getInstalledApps().also { _installedApps.value = it }
+            val state = _uiState.value
+            val allApps = state.installedApps.ifEmpty {
+                repository.getInstalledApps().also { apps ->
+                    _uiState.update { it.copy(installedApps = apps) }
+                }
             }
             val appsToCheck = allApps
-                .let { apps ->
-                    if (_includeSystemApps.value) apps else apps.filterNot(InstalledApp::isSystemApp)
-                }
-                .let { apps ->
-                    if (_includeDisabledApps.value) apps else apps.filter(InstalledApp::isEnabled)
-                }
+                .filter { state.includeSystemApps || !it.isSystemApp }
+                .filter { state.includeDisabledApps || it.isEnabled }
 
             repository.scanForUpdates(appsToCheck).collect { status ->
-                _scanStatus.value = status
-                when (status) {
-                    is ScanStatus.Success -> _updates.value = status.updates
-                    is ScanStatus.Error -> _updates.value = status.partialUpdates
-                    else -> Unit
+                _uiState.update { current ->
+                    when (status) {
+                        is ScanStatus.Scanning -> current.copy(scanStatus = status)
+                        is ScanStatus.Success -> current.copy(
+                            scanStatus = status,
+                            updates = status.updates
+                        )
+                        is ScanStatus.Error -> current.copy(
+                            scanStatus = status,
+                            updates = status.partialUpdates
+                        )
+                        ScanStatus.Idle -> current.copy(scanStatus = status)
+                    }
                 }
             }
         }
     }
 
     fun setSearchQuery(query: String) {
-        _searchQuery.value = query
+        _uiState.update { it.copy(searchQuery = query) }
     }
 
     fun setIncludeSystemApps(include: Boolean) {
-        if (_includeSystemApps.value == include) return
-        _includeSystemApps.value = include
+        if (_uiState.value.includeSystemApps == include) return
         preferences.includeSystemApps = include
+        _uiState.update { it.copy(includeSystemApps = include) }
         scanForUpdates()
     }
 
     fun setIncludeDisabledApps(include: Boolean) {
-        if (_includeDisabledApps.value == include) return
-        _includeDisabledApps.value = include
+        if (_uiState.value.includeDisabledApps == include) return
         preferences.includeDisabledApps = include
+        _uiState.update { it.copy(includeDisabledApps = include) }
         scanForUpdates()
     }
 
