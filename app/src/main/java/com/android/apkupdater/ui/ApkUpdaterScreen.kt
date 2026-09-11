@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
@@ -22,7 +23,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
@@ -35,20 +35,17 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -60,7 +57,7 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import com.android.apkupdater.data.model.AppFilter
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.android.apkupdater.data.model.AppUpdateInfo
 import com.android.apkupdater.data.model.InstalledApp
 import com.android.apkupdater.data.repository.ScanStatus
@@ -75,32 +72,19 @@ fun ApkUpdaterScreen(
     val scanStatus by viewModel.scanStatus.collectAsStateWithLifecycle()
     val installedApps by viewModel.installedApps.collectAsStateWithLifecycle()
     val updates by viewModel.updates.collectAsStateWithLifecycle()
-    val selectedFilter by viewModel.selectedFilter.collectAsStateWithLifecycle()
     val searchQuery by viewModel.searchQuery.collectAsStateWithLifecycle()
     val includeSystemApps by viewModel.includeSystemApps.collectAsStateWithLifecycle()
     var showSettings by remember { mutableStateOf(false) }
 
     val isScanning = scanStatus is ScanStatus.Scanning
-    val userApps = installedApps.filterNot(InstalledApp::isSystemApp)
-    val systemApps = installedApps.filter(InstalledApp::isSystemApp)
-    val updatePackages = updates.map(AppUpdateInfo::packageName).toSet()
-
-    val filteredUpdates = updates.filter { update ->
-        searchQuery.isBlank() ||
-            update.appName.contains(searchQuery, ignoreCase = true) ||
-            update.packageName.contains(searchQuery, ignoreCase = true)
-    }
-
-    val filteredApps = when (selectedFilter) {
-        AppFilter.USER_APPS -> userApps
-        AppFilter.SYSTEM_APPS -> systemApps
-        AppFilter.ALL_APPS -> installedApps
-        AppFilter.UPDATES_ONLY -> emptyList()
-    }.filter { app ->
-        searchQuery.isBlank() ||
-            app.appName.contains(searchQuery, ignoreCase = true) ||
-            app.packageName.contains(searchQuery, ignoreCase = true)
-    }
+    val updateMap = updates.associateBy(AppUpdateInfo::packageName)
+    val visibleApps = installedApps
+        .filter { includeSystemApps || !it.isSystemApp }
+        .filter { app ->
+            searchQuery.isBlank() ||
+                app.appName.contains(searchQuery, ignoreCase = true) ||
+                app.packageName.contains(searchQuery, ignoreCase = true)
+        }
 
     Scaffold(
         modifier = modifier.fillMaxSize(),
@@ -127,7 +111,7 @@ fun ApkUpdaterScreen(
             ScanStatusSection(
                 status = scanStatus,
                 updatesCount = updates.size,
-                appsCount = if (includeSystemApps) installedApps.size else userApps.size,
+                appsCount = if (includeSystemApps) installedApps.size else installedApps.count { !it.isSystemApp },
                 onScanClick = viewModel::scanForUpdates
             )
 
@@ -149,60 +133,7 @@ fun ApkUpdaterScreen(
                 singleLine = true
             )
 
-            LazyRow(
-                contentPadding = PaddingValues(horizontal = 16.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                item {
-                    FilterChip(
-                        selected = selectedFilter == AppFilter.UPDATES_ONLY,
-                        onClick = { viewModel.setFilter(AppFilter.UPDATES_ONLY) },
-                        label = { Text("Updates (${updates.size})") }
-                    )
-                }
-                item {
-                    FilterChip(
-                        selected = selectedFilter == AppFilter.USER_APPS,
-                        onClick = { viewModel.setFilter(AppFilter.USER_APPS) },
-                        label = { Text("User apps (${userApps.size})") }
-                    )
-                }
-                item {
-                    FilterChip(
-                        selected = selectedFilter == AppFilter.ALL_APPS,
-                        onClick = { viewModel.setFilter(AppFilter.ALL_APPS) },
-                        label = { Text("All (${installedApps.size})") }
-                    )
-                }
-                item {
-                    FilterChip(
-                        selected = selectedFilter == AppFilter.SYSTEM_APPS,
-                        onClick = { viewModel.setFilter(AppFilter.SYSTEM_APPS) },
-                        label = { Text("System (${systemApps.size})") }
-                    )
-                }
-            }
-
-            Spacer(Modifier.height(8.dp))
-
-            if (selectedFilter == AppFilter.UPDATES_ONLY) {
-                if (filteredUpdates.isEmpty()) {
-                    EmptyUpdatesView(isScanning = isScanning, onScanClick = viewModel::scanForUpdates)
-                } else {
-                    LazyColumn(
-                        modifier = Modifier.fillMaxSize(),
-                        contentPadding = PaddingValues(start = 16.dp, top = 8.dp, end = 16.dp, bottom = 16.dp),
-                        verticalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        items(filteredUpdates, key = { it.packageName }) { update ->
-                            UpdateListItem(
-                                update = update,
-                                onOpenApkMirror = { openUrlInBrowser(context, update.apkMirrorUrl) }
-                            )
-                        }
-                    }
-                }
-            } else if (filteredApps.isEmpty()) {
+            if (visibleApps.isEmpty()) {
                 EmptyAppsView(searchQuery)
             } else {
                 LazyColumn(
@@ -210,12 +141,13 @@ fun ApkUpdaterScreen(
                     contentPadding = PaddingValues(start = 16.dp, top = 8.dp, end = 16.dp, bottom = 16.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    items(filteredApps, key = { it.packageName }) { app ->
-                        InstalledAppListItem(
+                    items(visibleApps, key = { it.packageName }) { app ->
+                        val update = updateMap[app.packageName]
+                        AppListItem(
                             app = app,
-                            hasUpdate = app.packageName in updatePackages,
+                            update = update,
                             onOpenApkMirror = {
-                                val url = "https://www.apkmirror.com/?post_type=app_release&searchtype=app&s=${Uri.encode(app.packageName)}"
+                                val url = update?.apkMirrorUrl ?: buildApkMirrorSearchUrl(app.packageName)
                                 openUrlInBrowser(context, url)
                             }
                         )
@@ -262,7 +194,7 @@ private fun ScanStatusSection(
                 headlineContent = {
                     Text(if (updatesCount > 0) "$updatesCount updates available" else "All apps are up to date")
                 },
-                supportingContent = { Text("Checked $appsCount installed apps") },
+                supportingContent = { Text("Checked $appsCount installed apps · Stable releases only") },
                 trailingContent = { TextButton(onClick = onScanClick) { Text("Check again") } }
             )
         }
@@ -276,7 +208,7 @@ private fun ScanStatusSection(
         ScanStatus.Idle -> {
             ListItem(
                 headlineContent = { Text("Ready to check for updates") },
-                supportingContent = { Text("APKMirror") },
+                supportingContent = { Text("Stable releases only · APKMirror") },
                 trailingContent = { TextButton(onClick = onScanClick) { Text("Check now") } }
             )
         }
@@ -284,58 +216,45 @@ private fun ScanStatusSection(
 }
 
 @Composable
-private fun UpdateListItem(
-    update: AppUpdateInfo,
-    onOpenApkMirror: () -> Unit
-) {
-    Card(modifier = Modifier.fillMaxWidth()) {
-        ListItem(
-            leadingContent = { AppIconImage(update.packageName, Modifier.size(48.dp)) },
-            headlineContent = {
-                Text(update.appName, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            },
-            supportingContent = {
-                Text("v${update.currentVersionName} → v${update.newVersionName}")
-            },
-            trailingContent = {
-                FilledTonalButton(onClick = onOpenApkMirror) {
-                    Icon(Icons.Default.Search, contentDescription = null)
-                    Spacer(Modifier.width(8.dp))
-                    Text("Open")
-                }
-            }
-        )
-    }
-}
-
-@Composable
-private fun InstalledAppListItem(
+private fun AppListItem(
     app: InstalledApp,
-    hasUpdate: Boolean,
+    update: AppUpdateInfo?,
     onOpenApkMirror: () -> Unit
 ) {
     Card(modifier = Modifier.fillMaxWidth()) {
         ListItem(
             leadingContent = { AppIconImage(app.packageName, Modifier.size(48.dp)) },
             headlineContent = {
-                Text(app.appName, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text(
+                        app.appName,
+                        modifier = Modifier.weight(1f),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Spacer(Modifier.width(12.dp))
+                    Text(
+                        if (app.isSystemApp) "System" else "User",
+                        style = MaterialTheme.typography.labelMedium
+                    )
+                }
             },
             supportingContent = {
-                Text(
-                    buildString {
-                        append("v${app.versionName} (${app.versionCode})")
-                        if (app.isSystemApp) append(" · System")
-                        if (hasUpdate) append(" · Update available")
-                    },
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
+                if (update != null) {
+                    Text("v${app.versionName} (${app.versionCode}) → v${update.newVersionName} (${update.newVersionCode})")
+                } else {
+                    Text("v${app.versionName} (${app.versionCode})")
+                }
             },
             trailingContent = {
-                OutlinedButton(onClick = onOpenApkMirror) {
+                FilledTonalButton(onClick = onOpenApkMirror) {
                     Icon(Icons.Default.Search, contentDescription = null)
                     Spacer(Modifier.width(8.dp))
-                    Text("APKMirror")
+                    Text("Update")
                 }
             }
         )
@@ -394,38 +313,11 @@ private fun SettingsContent(
 }
 
 @Composable
-private fun EmptyUpdatesView(
-    isScanning: Boolean,
-    onScanClick: () -> Unit
-) {
+private fun EmptyAppsView(searchQuery: String) {
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .navigationBarsPadding()
             .padding(32.dp),
-        contentAlignment = Alignment.Center
-    ) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Icon(Icons.Default.CheckCircle, contentDescription = null, modifier = Modifier.size(48.dp))
-            Spacer(Modifier.height(16.dp))
-            Text("No updates found", style = MaterialTheme.typography.titleLarge)
-            Spacer(Modifier.height(8.dp))
-            Text(
-                if (isScanning) "Checking your installed apps…" else "All checked apps are up to date.",
-                style = MaterialTheme.typography.bodyMedium
-            )
-            if (!isScanning) {
-                Spacer(Modifier.height(16.dp))
-                TextButton(onClick = onScanClick) { Text("Check again") }
-            }
-        }
-    }
-}
-
-@Composable
-private fun EmptyAppsView(searchQuery: String) {
-    Box(
-        modifier = Modifier.fillMaxSize().padding(32.dp),
         contentAlignment = Alignment.Center
     ) {
         Text(
@@ -446,6 +338,9 @@ private fun drawableToBitmap(drawable: Drawable): Bitmap {
         }
     }
 }
+
+private fun buildApkMirrorSearchUrl(packageName: String): String =
+    "https://www.apkmirror.com/?post_type=app_release&searchtype=app&s=${Uri.encode(packageName)}"
 
 private fun openUrlInBrowser(context: Context, url: String) {
     runCatching {
