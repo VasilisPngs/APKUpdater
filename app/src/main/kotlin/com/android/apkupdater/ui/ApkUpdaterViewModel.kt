@@ -4,6 +4,7 @@ import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.android.apkupdater.data.installer.GooglePlayInstaller
+import com.android.apkupdater.data.model.AppUpdateInfo
 import com.android.apkupdater.data.model.InstalledApp
 import com.android.apkupdater.data.model.InstallState
 import com.android.apkupdater.data.preferences.AppPreferences
@@ -21,7 +22,7 @@ import kotlinx.coroutines.withContext
 data class UpdaterUiState(
     val scanStatus: ScanStatus = ScanStatus.Idle,
     val installedApps: List<InstalledApp> = emptyList(),
-    val updates: List<com.android.apkupdater.data.model.AppUpdateInfo> = emptyList(),
+    val updates: List<AppUpdateInfo> = emptyList(),
     val searchQuery: String = "",
     val includeSystemApps: Boolean = false,
     val includeDisabledApps: Boolean = false,
@@ -87,25 +88,21 @@ class ApkUpdaterViewModel(application: Application) : AndroidViewModel(applicati
         }
     }
 
-    fun installManual(app: InstalledApp, versionCode: Long, accountEmail: String) {
+    fun installManual(app: InstalledApp, versionCode: Long, email: String, aasToken: String) {
         if (installJob?.isActive == true) return
         scanJob?.cancel()
         installJob = viewModelScope.launch {
             val result = withContext(Dispatchers.IO) {
-                installer.install(app, versionCode, accountEmail) { state ->
+                installer.install(app, versionCode, email, aasToken) { state ->
                     _uiState.update { it.copy(installState = state) }
                 }
             }
             if (result.isSuccess) {
                 val apps = withContext(Dispatchers.IO) { repository.getInstalledApps() }
-                _uiState.update {
-                    it.copy(
-                        installedApps = apps,
-                        installState = InstallState.Success(app.appName)
-                    )
-                }
+                _uiState.update { it.copy(installedApps = apps) }
                 scanForUpdates()
             }
+            installJob = null
         }
     }
 

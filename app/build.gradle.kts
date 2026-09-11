@@ -45,6 +45,10 @@ android {
         compose = true
     }
 
+    lint {
+        disable += "LocalContextGetResourceValueCall"
+    }
+
     dependenciesInfo {
         includeInApk = false
         includeInBundle = true

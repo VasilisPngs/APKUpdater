@@ -3,117 +3,139 @@ package com.android.apkupdater.data.installer
 import android.content.Context
 import com.android.apkupdater.data.model.InstalledApp
 import com.android.apkupdater.data.model.InstallState
-import com.aurora.gplayapi.data.models.AuthData
 import com.aurora.gplayapi.data.models.PlayFile
 import com.aurora.gplayapi.helpers.AppDetailsHelper
 import com.aurora.gplayapi.helpers.AuthHelper
 import com.aurora.gplayapi.helpers.PurchaseHelper
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import java.io.File
+import java.lang.reflect.Method
 import okhttp3.OkHttpClient
 import okhttp3.Request
-import java.io.File
 
-class GooglePlayInstaller(context: Context) {
-    private val context = context.applicationContext
-    private val tokenProvider = GoogleAccountTokenProvider(this.context)
+class GooglePlayInstaller(private val context: Context) {
+    private val packageInstaller = PackageInstallerManager(context)
     private val httpClient = OkHttpClient()
-    private val packageInstaller = PackageInstallerManager(this.context)
 
     suspend fun install(
         app: InstalledApp,
         versionCode: Long,
-        accountEmail: String,
+        email: String,
+        aasToken: String,
         onState: (InstallState) -> Unit
     ): Result<Unit> = withContext(Dispatchers.IO) {
-        runCatching {
-            require(versionCode > app.versionCode) {
-                "The requested version is not newer than the installed version."
-            }
-            onState(InstallState.Preparing(app.appName))
+        try {
+            require(email.isNotBlank()) { "Google Play email is required." }
+            require(aasToken.isNotBlank()) { "Google Play AAS token is required." }
 
-            val playAuthToken = tokenProvider.fetchPlayAuthToken(accountEmail)
-            val authData = AuthHelper.build(
-                email = accountEmail,
-                token = playAuthToken,
-                tokenType = AuthHelper.Token.AAS
-            )
-            installPackage(
-                authData = authData,
+            onState(InstallState.Preparing(app.appName))
+            val authData = AuthHelper.build(email.trim(), aasToken.trim())
+            val details = AppDetailsHelper(authData).getAppByPackageName(app.packageName)
+
+            if (versionCode <= app.versionCode) {
+                throw IllegalArgumentException("The requested version must be newer than the installed version.")
+            }
+
+            val files = PurchaseHelper(authData).purchase(
                 packageName = app.packageName,
                 versionCode = versionCode,
-                displayName = app.appName,
-                installingDependency = false,
-                visiting = linkedSetOf(),
-                onState = onState
+                offerType = details.offerType
             )
-        }.fold(
-            onSuccess = { Result.success(Unit) },
-            onFailure = {
-                onState(InstallState.Error(app.appName, it.message ?: "Installation failed."))
-                Result.failure(it)
-            }
-        )
+
+            val apkFiles = downloadFiles(app.packageName, versionCode, files, onState)
+            installDependencies(authData, details, app.appName, onState)
+
+            onState(InstallState.Installing(app.appName, false))
+            packageInstaller.install(apkFiles).getOrThrow()
+            apkFiles.forEach(File::delete)
+            onState(InstallState.Success(app.appName))
+            Result.success(Unit)
+        } catch (exception: Exception) {
+            onState(InstallState.Error(app.appName, exception.message ?: "Installation failed"))
+            Result.failure(exception)
+        }
     }
 
-    private fun installPackage(
-        authData: AuthData,
+    private fun downloadFiles(
         packageName: String,
         versionCode: Long,
-        displayName: String,
-        installingDependency: Boolean,
-        visiting: MutableSet<String>,
+        files: List<PlayFile>,
         onState: (InstallState) -> Unit
-    ) {
-        if (!visiting.add(packageName)) {
-            throw IllegalStateException("Circular Google Play dependency detected for $packageName.")
-        }
+    ): List<File> {
+        val apkFiles = files.filter { it.type == PlayFile.Type.BASE || it.type == PlayFile.Type.SPLIT }
+        require(apkFiles.isNotEmpty()) { "Google Play returned no installable APK files." }
 
-        val app = AppDetailsHelper.with(authData).getAppByPackageName(packageName)
-        app.dependencies.dependentLibraries.forEach { dependency ->
-            val installedVersion = runCatching {
-                context.packageManager.getPackageInfo(dependency.packageName, 0).longVersionCode
-            }.getOrDefault(0L)
-            if (installedVersion < dependency.versionCode) {
-                installPackage(
-                    authData = authData,
-                    packageName = dependency.packageName,
-                    versionCode = dependency.versionCode,
-                    displayName = dependency.displayName,
-                    installingDependency = true,
-                    visiting = visiting,
-                    onState = onState
-                )
+        val directory = File(context.cacheDir, "play_$packageName_$versionCode").apply {
+            deleteRecursively()
+            mkdirs()
+        }
+        return apkFiles.mapIndexed { index, playFile ->
+            onState(InstallState.Downloading(packageName))
+            val target = File(directory, if (playFile.name.isBlank()) "apk_$index.apk" else playFile.name)
+            val request = Request.Builder().url(playFile.url).build()
+            httpClient.newCall(request).execute().use { response ->
+                if (!response.isSuccessful) {
+                    throw IllegalStateException("Google Play download failed (${response.code}).")
+                }
+                val body = response.body ?: throw IllegalStateException("Google Play returned an empty file.")
+                target.outputStream().use { output -> body.byteStream().copyTo(output) }
             }
+            target
         }
-
-        onState(InstallState.Downloading(displayName))
-        val playFiles = PurchaseHelper.with(authData)
-            .purchase(packageName, versionCode.toInt(), app.offerType)
-            .filter { it.url.isNotBlank() && it.name.endsWith(".apk", ignoreCase = true) }
-
-        if (playFiles.isEmpty()) {
-            throw IllegalStateException("Google Play returned no APK files for $packageName.")
-        }
-
-        val apkFiles = playFiles.map { download(it, packageName, versionCode) }
-        onState(InstallState.Installing(displayName, installingDependency))
-        packageInstaller.install(packageName, apkFiles).getOrThrow()
-        visiting.remove(packageName)
     }
 
-    private fun download(playFile: PlayFile, packageName: String, versionCode: Long): File {
-        val safeName = playFile.name.substringAfterLast('/').ifBlank { "base.apk" }
-        val directory = File(context.cacheDir, "google-play/$packageName/$versionCode").apply { mkdirs() }
-        val output = File(directory, safeName)
-        val request = Request.Builder().url(playFile.url).build()
-        httpClient.newCall(request).execute().use { response ->
-            if (!response.isSuccessful) {
-                throw IllegalStateException("Google Play download failed (${response.code}).")
-            }
-            val body = response.body ?: throw IllegalStateException("Google Play returned an empty download.")
-            body.byteStream().use { input -> output.outputStream().use { input.copyTo(it) } }
+    private suspend fun installDependencies(
+        authData: com.aurora.gplayapi.data.models.AuthData,
+        appDetails: Any,
+        appName: String,
+        onState: (InstallState) -> Unit
+    ) {
+        val dependencyEntries = extractDependentLibraries(appDetails)
+        for ((packageName, versionCode) in dependencyEntries) {
+            if (packageName.isBlank() || versionCode <= 0L) continue
+
+            val installedVersion = runCatching {
+                context.packageManager.getPackageInfo(packageName, 0).longVersionCode
+            }.getOrNull()
+            if (installedVersion != null && installedVersion >= versionCode) continue
+
+            onState(InstallState.Preparing(appName))
+            val dependencyDetails = AppDetailsHelper(authData).getAppByPackageName(packageName)
+            val dependencyFiles = PurchaseHelper(authData).purchase(
+                packageName = packageName,
+                versionCode = versionCode,
+                offerType = dependencyDetails.offerType
+            ).filter { it.type == PlayFile.Type.BASE || it.type == PlayFile.Type.SPLIT }
+
+            val downloaded = downloadFiles(packageName, versionCode, dependencyFiles, onState)
+            onState(InstallState.Installing(appName, true))
+            packageInstaller.install(downloaded).getOrThrow()
+            downloaded.forEach(File::delete)
         }
-        return output
+    }
+
+    private fun extractDependentLibraries(appDetails: Any): List<Pair<String, Long>> {
+        val dependencies = readProperty(appDetails, "dependencies") ?: return emptyList()
+        val libraries = readProperty(dependencies, "dependentLibraries") as? Iterable<*> ?: return emptyList()
+        return libraries.mapNotNull { library ->
+            val packageName = readProperty(library, "packageName") as? String
+            val versionCode = when (val value = readProperty(library, "versionCode")) {
+                is Number -> value.toLong()
+                is String -> value.toLongOrNull()
+                else -> null
+            }
+            if (packageName != null && versionCode != null) packageName to versionCode else null
+        }
+    }
+
+    private fun readProperty(target: Any, name: String): Any? {
+        val getterName = "get" + name.replaceFirstChar(Char::uppercaseChar)
+        return runCatching {
+            val getter = target.javaClass.methods.firstOrNull { method: Method ->
+                method.name == getterName && method.parameterTypes.isEmpty()
+            } ?: return@runCatching null
+            getter.invoke(target)
+        }.getOrNull()
     }
 }
