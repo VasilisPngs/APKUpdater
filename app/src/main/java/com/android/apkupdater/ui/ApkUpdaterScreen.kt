@@ -33,7 +33,6 @@ import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CenterAlignedTopAppBar
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.FilterChip
@@ -111,11 +110,7 @@ fun ApkUpdaterScreen(
                 title = { Text("APKUpdater") },
                 actions = {
                     IconButton(onClick = viewModel::scanForUpdates, enabled = !isScanning) {
-                        if (isScanning) {
-                            CircularProgressIndicator(modifier = Modifier.size(24.dp))
-                        } else {
-                            Icon(Icons.Default.Refresh, contentDescription = "Check for updates")
-                        }
+                        Icon(Icons.Default.Refresh, contentDescription = "Check for updates")
                     }
                     IconButton(onClick = { showSettings = true }) {
                         Icon(Icons.Default.Settings, contentDescription = "Settings")
@@ -252,8 +247,7 @@ private fun ScanStatusSection(
         is ScanStatus.Scanning -> {
             ListItem(
                 headlineContent = { Text("Checking for updates") },
-                supportingContent = { Text("${status.processed} of ${status.total} · ${status.currentBatch}") },
-                trailingContent = { CircularProgressIndicator() }
+                supportingContent = { Text("${status.processed} of ${status.total} · ${status.currentBatch}") }
             )
             LinearProgressIndicator(
                 progress = { if (status.total == 0) 0f else status.processed.toFloat() / status.total },
@@ -378,7 +372,7 @@ private fun SettingsContent(
     Column(Modifier.navigationBarsPadding()) {
         ListItem(
             headlineContent = { Text("Settings") },
-            supportingContent = { Text("APKMirror update checks") }
+            supportingContent = { Text("APKMirror update checks · Stable releases only") }
         )
         androidx.compose.material3.HorizontalDivider()
         ListItem(
