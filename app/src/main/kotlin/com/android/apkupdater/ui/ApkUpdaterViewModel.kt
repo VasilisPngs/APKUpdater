@@ -4,7 +4,6 @@ import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.android.apkupdater.data.installer.GooglePlayInstaller
-import com.android.apkupdater.data.model.AppUpdateInfo
 import com.android.apkupdater.data.model.InstalledApp
 import com.android.apkupdater.data.model.InstallState
 import com.android.apkupdater.data.preferences.AppPreferences
@@ -22,7 +21,7 @@ import kotlinx.coroutines.withContext
 data class UpdaterUiState(
     val scanStatus: ScanStatus = ScanStatus.Idle,
     val installedApps: List<InstalledApp> = emptyList(),
-    val updates: List<AppUpdateInfo> = emptyList(),
+    val updates: List<com.android.apkupdater.data.model.AppUpdateInfo> = emptyList(),
     val searchQuery: String = "",
     val includeSystemApps: Boolean = false,
     val includeDisabledApps: Boolean = false,
