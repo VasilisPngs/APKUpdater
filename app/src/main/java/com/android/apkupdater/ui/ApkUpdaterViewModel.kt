@@ -3,7 +3,6 @@ package com.android.apkupdater.ui
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
-import com.android.apkupdater.data.model.AppFilter
 import com.android.apkupdater.data.model.AppUpdateInfo
 import com.android.apkupdater.data.model.InstalledApp
 import com.android.apkupdater.data.preferences.AppPreferences
@@ -21,7 +20,6 @@ class ApkUpdaterViewModel(application: Application) : AndroidViewModel(applicati
     private val _scanStatus = MutableStateFlow<ScanStatus>(ScanStatus.Idle)
     private val _installedApps = MutableStateFlow<List<InstalledApp>>(emptyList())
     private val _updates = MutableStateFlow<List<AppUpdateInfo>>(emptyList())
-    private val _selectedFilter = MutableStateFlow(AppFilter.UPDATES_ONLY)
     private val _searchQuery = MutableStateFlow("")
     private val _includeSystemApps = MutableStateFlow(preferences.includeSystemApps)
     private var scanJob: Job? = null
@@ -29,7 +27,6 @@ class ApkUpdaterViewModel(application: Application) : AndroidViewModel(applicati
     val scanStatus: StateFlow<ScanStatus> = _scanStatus.asStateFlow()
     val installedApps: StateFlow<List<InstalledApp>> = _installedApps.asStateFlow()
     val updates: StateFlow<List<AppUpdateInfo>> = _updates.asStateFlow()
-    val selectedFilter: StateFlow<AppFilter> = _selectedFilter.asStateFlow()
     val searchQuery: StateFlow<String> = _searchQuery.asStateFlow()
     val includeSystemApps: StateFlow<Boolean> = _includeSystemApps.asStateFlow()
 
@@ -66,10 +63,6 @@ class ApkUpdaterViewModel(application: Application) : AndroidViewModel(applicati
                 }
             }
         }
-    }
-
-    fun setFilter(filter: AppFilter) {
-        _selectedFilter.value = filter
     }
 
     fun setSearchQuery(query: String) {
