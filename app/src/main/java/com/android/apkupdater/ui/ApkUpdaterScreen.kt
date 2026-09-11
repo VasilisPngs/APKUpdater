@@ -101,7 +101,7 @@ fun ApkUpdaterScreen(
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
             CenterAlignedTopAppBar(
-                title = { Text("APKUpdater") },
+                title = { Text(if (selectedAppTab == AppTab.Home) "APKUpdater" else selectedAppTab.label) },
                 actions = {
                     if (selectedAppTab != AppTab.Settings) {
                         IconButton(onClick = viewModel::scanForUpdates, enabled = !isScanning) {
@@ -189,9 +189,7 @@ private fun HomeContent(
             onScanClick = onScanClick
         )
 
-        if (apps.isEmpty()) {
-            EmptyAppsView("No app updates available")
-        } else {
+        if (apps.isNotEmpty()) {
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
                 contentPadding = PaddingValues(start = 16.dp, top = 8.dp, end = 16.dp, bottom = 16.dp),
@@ -287,7 +285,7 @@ private fun ScanStatusSection(
                 headlineContent = {
                     Text(if (updatesCount > 0) "$updatesCount updates available" else "All apps are up to date")
                 },
-                supportingContent = { Text("Checked $appsCount installed apps · Stable releases only") },
+                supportingContent = { Text("Checked $appsCount installed apps") },
                 trailingContent = { TextButton(onClick = onScanClick) { Text("Check again") } }
             )
         }
@@ -301,7 +299,6 @@ private fun ScanStatusSection(
         ScanStatus.Idle -> {
             ListItem(
                 headlineContent = { Text("Ready to check for updates") },
-                supportingContent = { Text("Stable releases only · APKMirror") },
                 trailingContent = { TextButton(onClick = onScanClick) { Text("Check now") } }
             )
         }
@@ -348,8 +345,6 @@ private fun AppListItem(
             },
             trailingContent = {
                 FilledTonalButton(onClick = onOpenApkMirror) {
-                    Icon(Icons.Rounded.Search, contentDescription = null)
-                    Spacer(Modifier.width(8.dp))
                     Text("Update")
                 }
             }
@@ -385,11 +380,6 @@ private fun SettingsContent(
     onIncludeSystemAppsChange: (Boolean) -> Unit
 ) {
     Column(modifier) {
-        ListItem(
-            headlineContent = { Text("Settings") },
-            supportingContent = { Text("APKMirror update checks · Stable releases only") }
-        )
-        androidx.compose.material3.HorizontalDivider()
         ListItem(
             headlineContent = { Text("System apps") },
             supportingContent = { Text("Include pre-installed system applications") },
