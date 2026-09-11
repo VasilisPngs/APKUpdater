@@ -33,7 +33,7 @@ class ApkMirrorInstaller(context: Context) {
 
         return try {
             onState(InstallState.Preparing(app.appName))
-            val mainPage = releasePageUrl?.takeIf(String::isNotBlank)
+            val mainPage = releasePageUrl?.takeIf { it.isNotBlank() }
                 ?: findVersionPage(app.packageName, targetVersionCode)
             val resolvedPackages = resolvePackageTree(mainPage, linkedSetOf())
             val mainPackage = resolvedPackages.lastOrNull()
@@ -49,12 +49,11 @@ class ApkMirrorInstaller(context: Context) {
                 if (alreadyInstalled) {
                     resolved.copy(files = emptyList())
                 } else {
-                    onState(InstallState.Downloading(app.appName))
                     val files = downloadPackage(resolved)
                     if (index == resolvedPackages.lastIndex) {
                         validateMainPackage(app, files.first(), targetVersionCode)
                     } else {
-                        validateInstalledPackageSignature(resolved.packageName, files.first())
+                        validateDependencyPackage(resolved.packageName, files.first())
                     }
                     resolved.copy(files = files)
                 }
@@ -88,7 +87,7 @@ class ApkMirrorInstaller(context: Context) {
             resolvePackageTree(dependencyUrl, visiting)
         }
         visiting.remove(metadata.packageName)
-        return dependencies.distinctBy(ResolvedPackage::packageName) + ResolvedPackage(
+        return dependencies.distinctBy { it.packageName } + ResolvedPackage(
             packageName = metadata.packageName,
             versionCode = metadata.versionCode,
             pageUrl = releasePageUrl,
@@ -101,7 +100,9 @@ class ApkMirrorInstaller(context: Context) {
         val downloadUrl = findDownloadUrl(page, packageInfo.pageUrl)
         val downloadFile = File(context.cacheDir, "apk_${packageInfo.packageName}_${packageInfo.versionCode}")
         pageService.download(downloadUrl).use { body ->
-            FileOutputStream(downloadFile).use { output -> body.byteStream().copyTo(output) }
+            FileOutputStream(downloadFile).use { output ->
+                body.byteStream().copyTo(output)
+            }
         }
 
         if (!isZip(downloadFile)) {
@@ -121,10 +122,10 @@ class ApkMirrorInstaller(context: Context) {
         val entries = mutableListOf<File>()
         ZipFile(download).use { zip ->
             zip.entries().asSequence()
-                .filter { !it.isDirectory && it.name.endsWith(".apk", ignoreCase = true) }
+                .filter { !it.isDirectory && it.getName().endsWith(".apk", ignoreCase = true) }
                 .forEachIndexed { index, entry ->
-                    val sourceName = entry.name.substringAfterLast('/')
-                    val name = if (sourceName.equals("base.apk", true)) {
+                    val sourceName = entry.getName().substringAfterLast('/')
+                    val name = if (sourceName.equals("base.apk", ignoreCase = true)) {
                         "base.apk"
                     } else {
                         "split_${index}_${sourceName.replace(Regex("[^A-Za-z0-9._-]"), "_")}"
@@ -139,7 +140,10 @@ class ApkMirrorInstaller(context: Context) {
 
         if (entries.isNotEmpty()) {
             download.delete()
-            return entries.sortedWith(compareByDescending<File> { it.name.equals("base.apk", true) }.thenBy(File::name))
+            return entries.sortedWith(
+                compareByDescending<File> { it.name.equals("base.apk", ignoreCase = true) }
+                    .thenBy { it.name }
+            )
         }
 
         val apk = File(extractedDir, "base.apk")
@@ -154,7 +158,7 @@ class ApkMirrorInstaller(context: Context) {
             .flatMap { it.apks.asSequence() }
             .firstOrNull { it.versionCode == versionCode }
             ?.link
-            ?.takeIf(String::isNotBlank)
+            ?.takeIf { it.isNotBlank() }
             ?.let { return it }
 
         val searchUrl = "https://www.apkmirror.com/?post_type=app_release&searchtype=app&s=" +
@@ -201,20 +205,30 @@ class ApkMirrorInstaller(context: Context) {
         if (packageInfo.packageName != app.packageName || packageInfo.longVersionCode != targetVersionCode) {
             throw SecurityException("The downloaded APK does not match the requested app version.")
         }
-        val certificate = packageInfo.signingInfo.apkContentsSigners.firstOrNull()
+        val signingInfo = packageInfo.signingInfo
             ?: throw SecurityException("The downloaded APK has no signing certificate.")
-        if (sha1(certificate.toByteArray()) != app.signatureSha1) {
+        val certificate = signingInfo.apkContentsSigners.firstOrNull()
+            ?: throw SecurityException("The downloaded APK has no signing certificate.")
+        val digest = sha1(certificate.toByteArray())
+        if (digest !in app.signatureSha1s) {
             throw SecurityException("The downloaded APK is signed with a different certificate.")
         }
     }
 
-    private fun validateInstalledPackageSignature(packageName: String, apkFile: File) {
+    private fun validateDependencyPackage(packageName: String, apkFile: File) {
         val installed = runCatching {
             context.packageManager.getPackageInfo(packageName, PackageManager.GET_SIGNING_CERTIFICATES)
         }.getOrNull() ?: return
+        val installedSigningInfo = installed.signingInfo ?: return
         val archive = readArchivePackageInfo(apkFile)
-        val installedSignatures = installed.signingInfo.apkContentsSigners.map { it.toByteArray().toList() }.toSet()
-        val archiveSignatures = archive.signingInfo.apkContentsSigners.map { it.toByteArray().toList() }.toSet()
+        val archiveSigningInfo = archive.signingInfo
+            ?: throw SecurityException("The dependency has no signing certificate.")
+        val installedSignatures = installedSigningInfo.apkContentsSigners
+            .map { it.toByteArray().toList() }
+            .toSet()
+        val archiveSignatures = archiveSigningInfo.apkContentsSigners
+            .map { it.toByteArray().toList() }
+            .toSet()
         if (installedSignatures.intersect(archiveSignatures).isEmpty()) {
             throw SecurityException("The dependency is signed differently from the installed package.")
         }
@@ -230,11 +244,15 @@ class ApkMirrorInstaller(context: Context) {
         }.getOrDefault(false)
 
     private fun resolveUrl(baseUrl: String, url: String): String =
-        if (url.startsWith("http://") || url.startsWith("https://")) url
-        else "https://www.apkmirror.com" + if (url.startsWith("/")) url else "/$url"
+        if (url.startsWith("http://") || url.startsWith("https://")) {
+            url
+        } else {
+            "https://www.apkmirror.com" + if (url.startsWith("/")) url else "/$url"
+        }
 
-    private fun isZip(file: File): Boolean =
-        file.inputStream().use { input -> input.read() == 0x50 && input.read() == 0x4b }
+    private fun isZip(file: File): Boolean = file.inputStream().use { input ->
+        input.read() == 0x50 && input.read() == 0x4b
+    }
 
     private fun sha1(bytes: ByteArray): String =
         MessageDigest.getInstance("SHA-1").digest(bytes).joinToString("") { "%02x".format(it) }

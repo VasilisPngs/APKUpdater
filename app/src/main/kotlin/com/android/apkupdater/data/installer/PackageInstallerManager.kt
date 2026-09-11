@@ -12,26 +12,36 @@ import java.io.File
 class PackageInstallerManager(private val context: Context) {
 
     suspend fun install(apkFiles: List<File>): Result<Unit> {
-        require(apkFiles.isNotEmpty())
+        if (apkFiles.isEmpty()) return Result.failure(IllegalArgumentException("No APK files to install."))
 
-        val packageInstaller = context.packageManager.packageInstaller
-        val totalSize = apkFiles.sumOf(File::length)
-        val sessionParams = PackageInstaller.SessionParams(PackageInstaller.SessionParams.MODE_FULL_INSTALL).apply {
+        val installer = context.getPackageManager().getPackageInstaller()
+        val totalSize = apkFiles.sumOf { it.length() }
+        val params = PackageInstaller.SessionParams(PackageInstaller.SessionParams.MODE_FULL_INSTALL).apply {
             setSize(totalSize)
         }
-        val sessionId = packageInstaller.createSession(sessionParams)
-        val session = packageInstaller.openSession(sessionId)
+        val sessionId = try {
+            installer.createSession(params)
+        } catch (exception: Exception) {
+            return Result.failure(exception)
+        }
+        val session = try {
+            installer.openSession(sessionId)
+        } catch (exception: Exception) {
+            runCatching { installer.abandonSession(sessionId) }
+            return Result.failure(exception)
+        }
+
         val result = CompletableDeferred<Result<Unit>>()
         val action = "${context.packageName}.PACKAGE_INSTALL_$sessionId"
-
         val receiver = object : BroadcastReceiver() {
             override fun onReceive(receiverContext: Context, intent: Intent) {
                 when (intent.getIntExtra(PackageInstaller.EXTRA_STATUS, PackageInstaller.STATUS_FAILURE)) {
                     PackageInstaller.STATUS_SUCCESS -> result.complete(Result.success(Unit))
                     PackageInstaller.STATUS_PENDING_USER_ACTION -> {
-                        intent.getParcelableExtra(Intent.EXTRA_INTENT, Intent::class.java)?.let {
-                            it.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                            receiverContext.startActivity(it)
+                        val confirmation = intent.getParcelableExtra(Intent.EXTRA_INTENT, Intent::class.java)
+                        if (confirmation != null) {
+                            confirmation.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                            receiverContext.startActivity(confirmation)
                         }
                     }
                     else -> {
@@ -44,8 +54,9 @@ class PackageInstallerManager(private val context: Context) {
         }
 
         context.registerReceiver(receiver, IntentFilter(action), Context.RECEIVER_NOT_EXPORTED)
-        try {
-            apkFiles.sortedWith(compareByDescending<File> { it.name.equals("base.apk", true) }.thenBy(File::name))
+        return try {
+            apkFiles
+                .sortedWith(compareByDescending<File> { it.name.equals("base.apk", ignoreCase = true) }.thenBy { it.name })
                 .forEach { file ->
                     file.inputStream().use { input ->
                         session.openWrite(file.name, 0, file.length()).use { output ->
@@ -55,21 +66,20 @@ class PackageInstallerManager(private val context: Context) {
                     }
                 }
 
-            val intent = Intent(action).setPackage(context.packageName)
             val pendingIntent = PendingIntent.getBroadcast(
                 context,
                 sessionId,
-                intent,
+                Intent(action).setPackage(context.packageName),
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_MUTABLE
             )
             session.commit(pendingIntent.intentSender)
             session.close()
-            return result.await()
+            result.await()
         } catch (exception: Exception) {
             runCatching { session.abandon() }
             Result.failure(exception)
         } finally {
-            context.unregisterReceiver(receiver)
+            runCatching { context.unregisterReceiver(receiver) }
         }
     }
 }
