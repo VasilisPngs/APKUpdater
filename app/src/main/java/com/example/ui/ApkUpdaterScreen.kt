@@ -12,7 +12,6 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -37,6 +36,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -53,7 +53,6 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -64,6 +63,7 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.android.apkupdater.data.model.AppFilter
 import com.android.apkupdater.data.model.AppUpdateInfo
 import com.android.apkupdater.data.model.InstalledApp
@@ -76,13 +76,13 @@ fun ApkUpdaterScreen(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
-    val scanStatus by viewModel.scanStatus.collectAsState()
-    val installedApps by viewModel.installedApps.collectAsState()
-    val updates by viewModel.updates.collectAsState()
-    val selectedFilter by viewModel.selectedFilter.collectAsState()
-    val searchQuery by viewModel.searchQuery.collectAsState()
-    val includeSystemApps by viewModel.includeSystemApps.collectAsState()
-    val onlyStable by viewModel.onlyStable.collectAsState()
+    val scanStatus by viewModel.scanStatus.collectAsStateWithLifecycle()
+    val installedApps by viewModel.installedApps.collectAsStateWithLifecycle()
+    val updates by viewModel.updates.collectAsStateWithLifecycle()
+    val selectedFilter by viewModel.selectedFilter.collectAsStateWithLifecycle()
+    val searchQuery by viewModel.searchQuery.collectAsStateWithLifecycle()
+    val includeSystemApps by viewModel.includeSystemApps.collectAsStateWithLifecycle()
+    val onlyStable by viewModel.onlyStable.collectAsStateWithLifecycle()
     var showSettings by remember { mutableStateOf(false) }
 
     val isScanning = scanStatus is ScanStatus.Scanning
@@ -218,7 +218,7 @@ fun ApkUpdaterScreen(
             } else {
                 LazyColumn(
                     modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(horizontal = 16.dp, bottom = 16.dp),
+                    contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 16.dp),
                     verticalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
                     items(filteredApps, key = { it.packageName }) { app ->
@@ -320,7 +320,7 @@ private fun UpdateListItem(
                     Text("v${update.currentVersionName} → v${update.newVersionName}")
                 },
                 trailingContent = {
-                    androidx.compose.material3.FilledTonalButton(onClick = onOpenApkMirror) {
+                    FilledTonalButton(onClick = onOpenApkMirror) {
                         Icon(Icons.Default.OpenInBrowser, contentDescription = null)
                         Spacer(Modifier.width(8.dp))
                         Text("Open")
