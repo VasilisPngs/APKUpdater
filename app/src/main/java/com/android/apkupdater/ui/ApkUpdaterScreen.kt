@@ -26,12 +26,9 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.OpenInBrowser
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.outlined.Android
-import androidx.compose.material.icons.outlined.Download
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
@@ -274,7 +271,7 @@ private fun ScanStatusSection(
             ListItem(
                 leadingContent = {
                     Icon(
-                        if (updatesCount > 0) Icons.Outlined.Download else Icons.Default.CheckCircle,
+                        if (updatesCount > 0) Icons.Default.CheckCircle else Icons.Default.CheckCircle,
                         contentDescription = null
                     )
                 },
@@ -321,7 +318,7 @@ private fun UpdateListItem(
                 },
                 trailingContent = {
                     FilledTonalButton(onClick = onOpenApkMirror) {
-                        Icon(Icons.Default.OpenInBrowser, contentDescription = null)
+                        Icon(Icons.Default.Search, contentDescription = null)
                         Spacer(Modifier.width(8.dp))
                         Text("Open")
                     }
@@ -397,7 +394,7 @@ private fun AppIconImage(
         Image(bitmap = bitmap.asImageBitmap(), contentDescription = null, modifier = modifier)
     } else {
         Box(modifier = modifier, contentAlignment = Alignment.Center) {
-            Icon(Icons.Outlined.Android, contentDescription = null)
+            Icon(Icons.Default.Search, contentDescription = null)
         }
     }
 }
