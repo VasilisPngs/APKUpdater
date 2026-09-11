@@ -17,20 +17,21 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.ArrowForward
-import androidx.compose.material.icons.rounded.CheckCircle
-import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.Home
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.Settings
+import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
@@ -51,6 +52,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -62,6 +64,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.android.apkupdater.data.model.AppUpdateInfo
 import com.android.apkupdater.data.model.InstalledApp
 import com.android.apkupdater.data.repository.ScanStatus
+import kotlinx.coroutines.launch
 
 private enum class AppTab(val label: String) {
     Home("Home"),
@@ -82,6 +85,9 @@ fun ApkUpdaterScreen(
     val searchQuery by viewModel.searchQuery.collectAsStateWithLifecycle()
     val includeSystemApps by viewModel.includeSystemApps.collectAsStateWithLifecycle()
     var selectedTab by remember { mutableIntStateOf(AppTab.Home.ordinal) }
+    val homeListState = rememberLazyListState()
+    val searchListState = rememberLazyListState()
+    val coroutineScope = rememberCoroutineScope()
 
     val updateMap = updates.associateBy(AppUpdateInfo::packageName)
     val selectedAppTab = AppTab.entries[selectedTab]
@@ -107,7 +113,17 @@ fun ApkUpdaterScreen(
                 AppTab.entries.forEach { tab ->
                     NavigationBarItem(
                         selected = selectedAppTab == tab,
-                        onClick = { selectedTab = tab.ordinal },
+                        onClick = {
+                            if (selectedAppTab == tab) {
+                                when (tab) {
+                                    AppTab.Home -> coroutineScope.launch { homeListState.animateScrollToItem(0) }
+                                    AppTab.Search -> coroutineScope.launch { searchListState.animateScrollToItem(0) }
+                                    AppTab.Settings -> Unit
+                                }
+                            } else {
+                                selectedTab = tab.ordinal
+                            }
+                        },
                         icon = {
                             Icon(
                                 imageVector = when (tab) {
@@ -133,6 +149,7 @@ fun ApkUpdaterScreen(
                 updates = updates,
                 apps = appsWithUpdates,
                 appsCount = visibleApps.size,
+                listState = homeListState,
                 onScanClick = viewModel::scanForUpdates,
                 onOpenApkMirror = { update -> openUrlInBrowser(context, update.apkMirrorUrl) }
             )
@@ -144,6 +161,7 @@ fun ApkUpdaterScreen(
                 onSearchQueryChange = viewModel::setSearchQuery,
                 apps = visibleApps,
                 updateMap = updateMap,
+                listState = searchListState,
                 onOpenApkMirror = { app ->
                     val url = updateMap[app.packageName]?.apkMirrorUrl
                         ?: buildApkMirrorSearchUrl(app.packageName)
@@ -169,6 +187,7 @@ private fun HomeContent(
     updates: List<AppUpdateInfo>,
     apps: List<InstalledApp>,
     appsCount: Int,
+    listState: LazyListState,
     onScanClick: () -> Unit,
     onOpenApkMirror: (AppUpdateInfo) -> Unit
 ) {
@@ -181,6 +200,7 @@ private fun HomeContent(
 
         if (apps.isNotEmpty()) {
             LazyColumn(
+                state = listState,
                 modifier = Modifier.fillMaxSize(),
                 contentPadding = PaddingValues(start = 16.dp, top = 8.dp, end = 16.dp, bottom = 16.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -205,6 +225,7 @@ private fun SearchContent(
     onSearchQueryChange: (String) -> Unit,
     apps: List<InstalledApp>,
     updateMap: Map<String, AppUpdateInfo>,
+    listState: LazyListState,
     onOpenApkMirror: (InstalledApp) -> Unit
 ) {
     Column(modifier = modifier) {
@@ -233,6 +254,7 @@ private fun SearchContent(
             )
         } else {
             LazyColumn(
+                state = listState,
                 modifier = Modifier.fillMaxSize(),
                 contentPadding = PaddingValues(start = 16.dp, top = 8.dp, end = 16.dp, bottom = 16.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -270,7 +292,6 @@ private fun ScanStatusSection(
         }
         is ScanStatus.Success -> {
             ListItem(
-                leadingContent = { Icon(Icons.Rounded.CheckCircle, contentDescription = null) },
                 headlineContent = {
                     Text(if (updatesCount > 0) "$updatesCount updates available" else "All apps are up to date")
                 },
@@ -300,52 +321,49 @@ private fun AppListItem(
     onOpenApkMirror: () -> Unit
 ) {
     OutlinedCard(
-        modifier = Modifier
-            .fillMaxWidth()
-            .heightIn(min = 180.dp),
+        modifier = Modifier.fillMaxWidth(),
         shape = MaterialTheme.shapes.large
     ) {
-        Row(
+        Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 24.dp, vertical = 28.dp),
-            verticalAlignment = Alignment.Top
+                .padding(20.dp)
         ) {
-            AppIconImage(app.packageName, Modifier.size(64.dp))
-            Spacer(Modifier.width(20.dp))
-            Column(modifier = Modifier.weight(1f)) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.Top
-                ) {
-                    Text(
-                        text = app.appName,
-                        modifier = Modifier.weight(1f),
-                        maxLines = 3,
-                        overflow = TextOverflow.Ellipsis,
-                        style = MaterialTheme.typography.titleMedium
-                    )
-                    Spacer(Modifier.width(20.dp))
-                    Text(
-                        text = if (app.isSystemApp) "System" else "User",
-                        style = MaterialTheme.typography.labelMedium
-                    )
-                }
-
-                Spacer(Modifier.size(20.dp))
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.Top
+            ) {
+                AppIconImage(app.packageName, Modifier.size(64.dp))
+                Spacer(Modifier.width(20.dp))
+                Column(modifier = Modifier.weight(1f)) {
                     Row(
-                        modifier = Modifier.weight(1f),
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.Top
+                    ) {
+                        Text(
+                            text = app.appName,
+                            modifier = Modifier.weight(1f),
+                            maxLines = 3,
+                            overflow = TextOverflow.Ellipsis,
+                            style = MaterialTheme.typography.titleMedium
+                        )
+                        Spacer(Modifier.width(20.dp))
+                        Text(
+                            text = if (app.isSystemApp) "System" else "User",
+                            style = MaterialTheme.typography.labelMedium
+                        )
+                    }
+
+                    Spacer(Modifier.size(16.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
                             text = "v${app.versionName} (${app.versionCode})",
                             style = MaterialTheme.typography.bodyLarge,
-                            maxLines = 1,
+                            maxLines = 2,
                             overflow = TextOverflow.Ellipsis
                         )
                         if (update != null) {
@@ -359,20 +377,25 @@ private fun AppListItem(
                             Text(
                                 text = "v${update.newVersionName} (${update.newVersionCode})",
                                 style = MaterialTheme.typography.bodyLarge,
-                                maxLines = 1,
+                                maxLines = 2,
                                 overflow = TextOverflow.Ellipsis
                             )
                         }
                     }
+                }
+            }
 
-                    Spacer(Modifier.width(16.dp))
+            Spacer(Modifier.size(16.dp))
 
-                    FilledTonalButton(
-                        onClick = onOpenApkMirror,
-                        shape = MaterialTheme.shapes.extraLarge
-                    ) {
-                        Text(if (update != null) "Update" else "APKMirror")
-                    }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.End
+            ) {
+                FilledTonalButton(
+                    onClick = onOpenApkMirror,
+                    shape = MaterialTheme.shapes.extraLarge
+                ) {
+                    Text(if (update != null) "Update" else "APKMirror")
                 }
             }
         }
