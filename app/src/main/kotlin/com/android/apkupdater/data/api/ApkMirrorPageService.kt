@@ -2,7 +2,6 @@ package com.android.apkupdater.data.api
 
 import okhttp3.ResponseBody
 import retrofit2.Retrofit
-import retrofit2.converter.scalars.ScalarsConverterFactory
 import retrofit2.http.GET
 import retrofit2.http.Headers
 import retrofit2.http.Url
@@ -18,7 +17,6 @@ interface ApkMirrorPageService {
 
         fun create(): ApkMirrorPageService = Retrofit.Builder()
             .baseUrl(BASE_URL)
-            .addConverterFactory(ScalarsConverterFactory.create())
             .build()
             .create(ApkMirrorPageService::class.java)
     }
