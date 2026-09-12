@@ -26,7 +26,8 @@ data class UpdaterUiState(
     val installedApps: List<InstalledApp> = emptyList(),
     val updates: List<AppUpdateInfo> = emptyList(),
     val includeDisabledApps: Boolean = false,
-    val installState: InstallState = InstallState.Idle
+    val installState: InstallState = InstallState.Idle,
+    val installingPackage: String? = null
 )
 
 class GUpdaterViewModel(application: Application) : AndroidViewModel(application) {
@@ -84,13 +85,13 @@ class GUpdaterViewModel(application: Application) : AndroidViewModel(application
         }
     }
 
-    fun installManual(app: InstalledApp, versionCode: Long) = install {
+    fun installManual(app: InstalledApp, versionCode: Long) = install(app.packageName) {
         googlePlayInstaller.install(app, versionCode) { state ->
             _uiState.update { it.copy(installState = state) }
         }
     }
 
-    fun installBundle(uri: Uri) = install {
+    fun installBundle(uri: Uri) = install(packageName = null) {
         bundleInstaller.install(uri) { state ->
             _uiState.update { it.copy(installState = state) }
         }
@@ -103,11 +104,13 @@ class GUpdaterViewModel(application: Application) : AndroidViewModel(application
         scanForUpdates()
     }
 
-    private fun install(block: suspend () -> Result<Unit>) {
+    private fun install(packageName: String?, block: suspend () -> Result<Unit>) {
         if (installJob?.isActive == true) return
         scanJob?.cancel()
+        _uiState.update { it.copy(installingPackage = packageName) }
         installJob = viewModelScope.launch {
             val result = withContext(Dispatchers.IO) { block() }
+            _uiState.update { it.copy(installingPackage = null) }
             if (result.isSuccess) {
                 val apps = withContext(Dispatchers.IO) { repository.getInstalledApps() }
                 _uiState.update { it.copy(installedApps = apps) }

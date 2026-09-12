@@ -40,8 +40,7 @@ class GooglePlayInstaller(private val context: Context) {
             directory.mkdirs()
 
             val session = openSession(app.packageName)
-            val certificateHash = certificateHash(app.packageName)
-            val files = purchase(session, app.packageName, versionCode, session.details.offerType, certificateHash)
+            val files = purchase(session, app, versionCode)
 
             val apkFiles = download(app.appName, files, directory, onState)
             installDependencies(session, app.appName, directory, onState)
@@ -71,18 +70,25 @@ class GooglePlayInstaller(private val context: Context) {
         return PlaySession(authData, AppDetailsHelper(authData).getAppByPackageName(packageName))
     }
 
+    private fun purchase(session: PlaySession, app: InstalledApp, versionCode: Long): List<PlayFile> = try {
+        purchase(session, app.packageName, versionCode, session.details.offerType)
+    } catch (exception: Exception) {
+        val playVersionCode = session.details.versionCode
+        if (playVersionCode == versionCode || playVersionCode <= app.versionCode) throw exception
+        purchase(session, app.packageName, playVersionCode, session.details.offerType)
+    }
+
     private fun purchase(
         session: PlaySession,
         packageName: String,
         versionCode: Long,
-        offerType: Int,
-        certificateHash: String?
+        offerType: Int
     ): List<PlayFile> {
         val files = PurchaseHelper(session.authData).purchase(
             packageName = packageName,
             versionCode = versionCode,
             offerType = offerType,
-            certificateHash = certificateHash
+            certificateHash = certificateHash(packageName)
         ).filter { it.type == PlayFile.Type.BASE || it.type == PlayFile.Type.SPLIT }
 
         require(files.isNotEmpty()) { "Google Play returned no installable APK files." }
@@ -144,8 +150,7 @@ class GooglePlayInstaller(private val context: Context) {
                 session = session,
                 packageName = library.packageName,
                 versionCode = library.versionCode,
-                offerType = libraryDetails.offerType,
-                certificateHash = certificateHash(library.packageName)
+                offerType = libraryDetails.offerType
             )
 
             val libraryDirectory = File(directory, library.packageName).apply { mkdirs() }

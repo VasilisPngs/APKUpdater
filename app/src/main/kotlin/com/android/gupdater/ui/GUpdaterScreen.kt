@@ -31,6 +31,7 @@ import androidx.compose.material.icons.rounded.Home
 import androidx.compose.material.icons.rounded.MoreVert
 import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material3.CenterAlignedTopAppBar
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -91,7 +92,6 @@ fun GUpdaterScreen(
     val context = LocalContext.current
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     var selectedTabIndex by remember { mutableIntStateOf(AppTab.Home.ordinal) }
-    var manualUpdateApp by remember { mutableStateOf<InstalledApp?>(null) }
     var menuExpanded by remember { mutableStateOf(false) }
     val homeListState = rememberLazyListState()
     val coroutineScope = rememberCoroutineScope()
@@ -121,18 +121,6 @@ fun GUpdaterScreen(
     }
     val appsWithUpdates = remember(uiState.installedApps, updateMap) {
         uiState.installedApps.filter { updateMap.containsKey(it.packageName) }
-    }
-
-    manualUpdateApp?.let { app ->
-        ManualUpdateDialog(
-            app = app,
-            suggestedVersionCode = updateMap[app.packageName]?.newVersionCode ?: 0L,
-            onDismiss = { manualUpdateApp = null },
-            onConfirm = { versionCode ->
-                manualUpdateApp = null
-                viewModel.installManual(app, versionCode)
-            }
-        )
     }
 
     Scaffold(
@@ -199,8 +187,9 @@ fun GUpdaterScreen(
                 updateMap = updateMap,
                 listState = homeListState,
                 installState = uiState.installState,
+                installingPackage = uiState.installingPackage,
                 onScanClick = viewModel::scanForUpdates,
-                onManualUpdate = { manualUpdateApp = it }
+                onManualUpdate = { app, update -> viewModel.installManual(app, update.newVersionCode) }
             )
             AppTab.Settings -> SettingsContent(
                 modifier = Modifier.fillMaxSize().padding(innerPadding).navigationBarsPadding(),
@@ -219,15 +208,16 @@ private fun HomeContent(
     updateMap: Map<String, AppUpdateInfo>,
     listState: LazyListState,
     installState: InstallState,
+    installingPackage: String?,
     onScanClick: () -> Unit,
-    onManualUpdate: (InstalledApp) -> Unit
+    onManualUpdate: (InstalledApp, AppUpdateInfo) -> Unit
 ) {
     val installActive = installState is InstallState.Preparing ||
         installState is InstallState.Downloading ||
         installState is InstallState.Installing
 
     Column(modifier = modifier) {
-        InstallProgressSection(installState)
+        if (installingPackage == null) InstallProgressSection(installState)
         ScanStatusSection(status, apps.size, onScanClick)
         if (apps.isEmpty()) {
             EmptyAppsView(
@@ -249,7 +239,9 @@ private fun HomeContent(
                             app = app,
                             update = update,
                             installActive = installActive,
-                            onManualUpdate = { onManualUpdate(app) }
+                            installing = installingPackage == app.packageName,
+                            downloadProgress = (installState as? InstallState.Downloading)?.progress,
+                            onManualUpdate = { onManualUpdate(app, update) }
                         )
                     }
                 }
@@ -320,6 +312,8 @@ private fun AppListItem(
     app: InstalledApp,
     update: AppUpdateInfo,
     installActive: Boolean,
+    installing: Boolean,
+    downloadProgress: Float?,
     onManualUpdate: () -> Unit
 ) {
     val context = LocalContext.current
@@ -365,13 +359,24 @@ private fun AppListItem(
                 }
             }
             Spacer(Modifier.height(16.dp))
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                OutlinedButton(
-                    onClick = onManualUpdate,
-                    enabled = !installActive,
-                    shape = MaterialTheme.shapes.extraLarge
-                ) {
-                    Text(stringResource(R.string.manual))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.End,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                when {
+                    installing && downloadProgress != null -> CircularProgressIndicator(
+                        progress = { downloadProgress },
+                        modifier = Modifier.size(40.dp)
+                    )
+                    installing -> CircularProgressIndicator(modifier = Modifier.size(40.dp))
+                    else -> OutlinedButton(
+                        onClick = onManualUpdate,
+                        enabled = !installActive,
+                        shape = MaterialTheme.shapes.extraLarge
+                    ) {
+                        Text(stringResource(R.string.manual))
+                    }
                 }
                 Spacer(Modifier.width(8.dp))
                 FilledTonalButton(
