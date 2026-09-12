@@ -60,7 +60,7 @@ class GooglePlayInstaller(private val context: Context) {
     }
 
     private fun openSession(packageName: String): PlaySession {
-        val cached = authProvider.cached()
+        val cached = authProvider.current()
         if (cached != null) {
             val details = runCatching { AppDetailsHelper(cached).getAppByPackageName(packageName) }
             details.getOrNull()?.let { return PlaySession(cached, it) }

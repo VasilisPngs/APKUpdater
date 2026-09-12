@@ -9,7 +9,6 @@ converterMoshi = "3.0.0"
 okhttp = "5.3.2"
 moshi = "1.15.2"
 kotlinxCoroutines = "1.11.0"
-kotlinxSerialization = "1.11.0"
 auroraGplayapi = "3.6.4"
 
 [libraries]
@@ -26,7 +25,6 @@ retrofit = { group = "com.squareup.retrofit2", name = "retrofit", version.ref = 
 converter-moshi = { group = "com.squareup.retrofit2", name = "converter-moshi", version.ref = "converterMoshi" }
 okhttp = { group = "com.squareup.okhttp3", name = "okhttp", version.ref = "okhttp" }
 kotlinx-coroutines-android = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-android", version.ref = "kotlinxCoroutines" }
-kotlinx-serialization-json = { group = "org.jetbrains.kotlinx", name = "kotlinx-serialization-json", version.ref = "kotlinxSerialization" }
 aurora-gplayapi = { group = "com.auroraoss", name = "gplayapi", version.ref = "auroraGplayapi" }
 
 [plugins]
