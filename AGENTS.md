@@ -46,7 +46,6 @@
 - Side effects in Compose: https://developer.android.com/develop/ui/compose/side-effects
 - Lazy lists and grids: https://developer.android.com/develop/ui/compose/lists
 - Animations in Compose: https://developer.android.com/develop/ui/compose/animation/introduction
-- Accessibility in Compose: https://developer.android.com/develop/ui/compose/accessibility
 - Adaptive apps: https://developer.android.com/develop/ui/compose/layouts/adaptive/get-started-with-adaptive-apps
 - Support different display sizes: https://developer.android.com/develop/ui/compose/layouts/adaptive/support-different-display-sizes
 - Dynamic color: https://developer.android.com/develop/ui/views/theming/dynamic-colors

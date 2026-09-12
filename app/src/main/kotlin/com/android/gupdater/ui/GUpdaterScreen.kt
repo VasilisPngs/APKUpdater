@@ -306,6 +306,7 @@ private fun HomeContent(
             items(apps, key = { it.packageName }) { app ->
                 updateMap[app.packageName]?.let { update ->
                     AppListItem(
+                        modifier = Modifier.animateItem(),
                         app = app,
                         update = update,
                         installState = installs[app.packageName],
@@ -330,6 +331,7 @@ private fun RoundedSection(content: @Composable () -> Unit) {
 
 @Composable
 private fun AppListItem(
+    modifier: Modifier,
     app: InstalledApp,
     update: AppUpdateInfo,
     installState: InstallState?,
@@ -346,7 +348,7 @@ private fun AppListItem(
         }
     }
 
-    Card(modifier = Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.extraLarge) {
+    Card(modifier = modifier.fillMaxWidth(), shape = MaterialTheme.shapes.extraLarge) {
         Column(modifier = Modifier.fillMaxWidth().padding(20.dp)) {
             Row(verticalAlignment = Alignment.Top) {
                 if (iconBitmap != null) {
