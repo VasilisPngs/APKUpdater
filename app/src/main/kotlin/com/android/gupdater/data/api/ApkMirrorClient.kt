@@ -43,6 +43,7 @@ class ApkMirrorClient {
             ApkMirrorApp(
                 packageName = entry.optString("pname"),
                 versionName = release?.optString("version").orEmpty(),
+                developerName = entry.optJSONObject("developer")?.optString("name").orEmpty(),
                 publishDate = release?.optString("publish_date").orEmpty(),
                 apks = parseApks(entry.optJSONArray("apks"))
             )

@@ -155,8 +155,11 @@ class AppUpdateRepository(
     }
 
     private fun isGoogleApp(packageName: String, developerName: String): Boolean =
-        developerName.startsWith(GOOGLE_DEVELOPER, ignoreCase = true) ||
+        if (developerName.isBlank()) {
             GOOGLE_PACKAGE_PREFIXES.any(packageName::startsWith)
+        } else {
+            developerName.contains(GOOGLE_DEVELOPER, ignoreCase = true)
+        }
 
     private fun parseUpdates(
         apps: List<ApkMirrorApp>,
@@ -166,12 +169,11 @@ class AppUpdateRepository(
 
         return apps.mapNotNull { app ->
             val installed = installedByPackage[app.packageName] ?: return@mapNotNull null
+            if (!isGoogleApp(app.packageName, app.developerName)) return@mapNotNull null
             if (!isStableRelease(app.packageName)) return@mapNotNull null
             if (!isStableRelease(app.versionName)) return@mapNotNull null
 
             val apk = bestApk(app.apks, installed) ?: return@mapNotNull null
-            val url = apk.link.toAbsoluteApkMirrorUrl()
-            if (GOOGLE_APKMIRROR_PREFIXES.none(url::startsWith)) return@mapNotNull null
 
             AppUpdateInfo(
                 packageName = installed.packageName,
@@ -181,7 +183,7 @@ class AppUpdateRepository(
                 publishedAt = publishedAt(apk.publishDate.ifBlank { app.publishDate }),
                 playAvailable = false,
                 playVersionCode = null,
-                apkMirrorUrl = url
+                apkMirrorUrl = apk.link.toAbsoluteApkMirrorUrl()
             )
         }
     }
@@ -356,12 +358,6 @@ class AppUpdateRepository(
             (PackageManager.GET_SIGNING_CERTIFICATES or PackageManager.MATCH_DISABLED_COMPONENTS).toLong()
         )
         val GOOGLE_PACKAGE_PREFIXES = listOf("com.google.", "com.android.")
-        val GOOGLE_APKMIRROR_PREFIXES = listOf(
-            "https://www.apkmirror.com/apk/google-inc/",
-            "https://www.apkmirror.com/apk/research-at-google/",
-            "https://www.apkmirror.com/apk/google-labs/",
-            "https://www.apkmirror.com/apk/google-fiber-inc/"
-        )
         val UNIVERSAL_ARCHITECTURES = setOf("universal", "noarch")
         val UNIVERSAL_DENSITIES = setOf("nodpi", "anydpi", "universal")
         val DENSITY_BUCKETS = listOf(120, 160, 213, 240, 320, 480, 640)

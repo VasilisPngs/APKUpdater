@@ -3,6 +3,7 @@ package com.android.gupdater.data.model
 data class ApkMirrorApp(
     val packageName: String,
     val versionName: String,
+    val developerName: String,
     val publishDate: String,
     val apks: List<ApkMirrorApk>
 )
