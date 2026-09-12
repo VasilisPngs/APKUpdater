@@ -134,7 +134,15 @@ class GUpdaterViewModel(application: Application) : AndroidViewModel(application
 
             if (result.isSuccess) {
                 val apps = withContext(Dispatchers.IO) { repository.getInstalledApps() }
-                _uiState.update { it.copy(installedApps = apps) }
+                val installedVersions = apps.associate { it.packageName to it.versionCode }
+                _uiState.update { state ->
+                    state.copy(
+                        installedApps = apps,
+                        updates = state.updates.filter { update ->
+                            update.newVersionCode > (installedVersions[update.packageName] ?: 0L)
+                        }
+                    )
+                }
             }
             if (installJobs.isEmpty()) scanForUpdates()
         }
