@@ -8,6 +8,7 @@ import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONObject
+import java.net.UnknownHostException
 import java.util.Locale
 import java.util.Properties
 
@@ -45,9 +46,16 @@ class PlayAuthProvider(private val context: Context) {
             .post(payload.toRequestBody(JSON_MEDIA_TYPE))
             .build()
 
-        val body = SharedHttpClient.instance.newCall(request).execute().use { response ->
-            if (!response.isSuccessful) throw IllegalStateException(dispenserError(response.code))
-            response.body.string()
+        val body = try {
+            SharedHttpClient.instance.newCall(request).execute().use { response ->
+                if (!response.isSuccessful) throw IllegalStateException(dispenserError(response.code))
+                response.body.string()
+            }
+        } catch (exception: UnknownHostException) {
+            throw IllegalStateException(
+                "This device could not resolve $DISPENSER_HOST. A VPN, private DNS or content blocker is filtering it.",
+                exception
+            )
         }
 
         val credentials = JSONObject(body)
@@ -73,6 +81,7 @@ class PlayAuthProvider(private val context: Context) {
     }
 
     private companion object {
+        const val DISPENSER_HOST = "auroraoss.com"
         const val DISPENSER_URL = "https://auroraoss.com/api/auth/"
         val JSON_MEDIA_TYPE = "application/json".toMediaType()
     }
