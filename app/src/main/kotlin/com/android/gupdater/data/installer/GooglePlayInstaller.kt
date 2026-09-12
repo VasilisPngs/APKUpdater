@@ -45,7 +45,7 @@ class GooglePlayInstaller(private val context: Context) {
             val apkFiles = download(app.appName, files, directory, onState)
             installDependencies(session, app.appName, directory, onState)
 
-            onState(InstallState.Installing(app.appName, false))
+            onState(InstallState.Installing(app.appName))
             packageInstaller.install(apkFiles.map(ApkSource::of)).getOrThrow()
             onState(InstallState.Success(app.appName))
             Result.success(Unit)
@@ -60,14 +60,13 @@ class GooglePlayInstaller(private val context: Context) {
     }
 
     private fun openSession(packageName: String): PlaySession {
-        val cached = authProvider.current()
-        if (cached != null) {
-            val details = runCatching { AppDetailsHelper(cached).getAppByPackageName(packageName) }
-            details.getOrNull()?.let { return PlaySession(cached, it) }
-            authProvider.invalidate()
-        }
-        val authData = authProvider.create()
-        return PlaySession(authData, AppDetailsHelper(authData).getAppByPackageName(packageName))
+        val authData = authProvider.session()
+        runCatching { AppDetailsHelper(authData).getAppByPackageName(packageName) }
+            .getOrNull()
+            ?.let { return PlaySession(authData, it) }
+
+        val renewed = authProvider.renew(authData)
+        return PlaySession(renewed, AppDetailsHelper(renewed).getAppByPackageName(packageName))
     }
 
     private fun purchase(session: PlaySession, app: InstalledApp, versionCode: Long): List<PlayFile> = try {
@@ -155,7 +154,7 @@ class GooglePlayInstaller(private val context: Context) {
 
             val libraryDirectory = File(directory, library.packageName).apply { mkdirs() }
             val apkFiles = download(appName, files, libraryDirectory, onState)
-            onState(InstallState.Installing(appName, true))
+            onState(InstallState.Installing(appName))
             packageInstaller.install(apkFiles.map(ApkSource::of)).getOrThrow()
         }
     }

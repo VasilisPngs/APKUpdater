@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -20,7 +21,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
@@ -40,17 +40,16 @@ import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
+import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -63,6 +62,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -72,8 +72,8 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.android.gupdater.R
 import com.android.gupdater.data.model.AppUpdateInfo
-import com.android.gupdater.data.model.InstalledApp
 import com.android.gupdater.data.model.InstallState
+import com.android.gupdater.data.model.InstalledApp
 import com.android.gupdater.data.repository.ScanStatus
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -98,22 +98,18 @@ fun GUpdaterScreen(
     val coroutineScope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
     val selectedTab = AppTab.entries[selectedTabIndex]
-    val installActive = uiState.installState is InstallState.Preparing ||
-        uiState.installState is InstallState.Downloading ||
-        uiState.installState is InstallState.Installing
     val bundlePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         uri?.let(viewModel::installBundle)
     }
 
-    LaunchedEffect(uiState.installState) {
-        when (val state = uiState.installState) {
-            is InstallState.Success -> snackbarHostState.showSnackbar(
-                context.getString(R.string.update_installed, state.appName)
+    LaunchedEffect(Unit) {
+        viewModel.events.collect { event ->
+            snackbarHostState.showSnackbar(
+                when (event) {
+                    is InstallEvent.Finished -> context.getString(R.string.update_installed, event.appName)
+                    is InstallEvent.Failed -> context.getString(R.string.update_failed, event.message)
+                }
             )
-            is InstallState.Error -> snackbarHostState.showSnackbar(
-                context.getString(R.string.update_failed, state.message)
-            )
-            else -> Unit
         }
     }
 
@@ -131,7 +127,7 @@ fun GUpdaterScreen(
             CenterAlignedTopAppBar(
                 title = { Text(stringResource(R.string.app_name)) },
                 actions = {
-                    IconButton(onClick = { menuExpanded = true }, enabled = !installActive) {
+                    IconButton(onClick = { menuExpanded = true }) {
                         Icon(
                             imageVector = Icons.Rounded.MoreVert,
                             contentDescription = stringResource(R.string.more_options)
@@ -139,7 +135,8 @@ fun GUpdaterScreen(
                     }
                     DropdownMenu(
                         expanded = menuExpanded,
-                        onDismissRequest = { menuExpanded = false }
+                        onDismissRequest = { menuExpanded = false },
+                        shape = MaterialTheme.shapes.large
                     ) {
                         DropdownMenuItem(
                             text = { Text(stringResource(R.string.install_bundle)) },
@@ -187,8 +184,7 @@ fun GUpdaterScreen(
                 apps = appsWithUpdates,
                 updateMap = updateMap,
                 listState = homeListState,
-                installState = uiState.installState,
-                installingPackage = uiState.installingPackage,
+                installs = uiState.installs,
                 onScanClick = viewModel::scanForUpdates,
                 onPlayStoreUpdate = { app, update -> viewModel.installFromPlay(app, update.newVersionCode) }
             )
@@ -208,18 +204,70 @@ private fun HomeContent(
     apps: List<InstalledApp>,
     updateMap: Map<String, AppUpdateInfo>,
     listState: LazyListState,
-    installState: InstallState,
-    installingPackage: String?,
+    installs: Map<String, InstallState>,
     onScanClick: () -> Unit,
     onPlayStoreUpdate: (InstalledApp, AppUpdateInfo) -> Unit
 ) {
-    val installActive = installState is InstallState.Preparing ||
-        installState is InstallState.Downloading ||
-        installState is InstallState.Installing
+    val fileInstalls = remember(installs, apps) {
+        installs.filterKeys { key -> apps.none { it.packageName == key } }.values.toList()
+    }
 
     Column(modifier = modifier) {
-        if (installingPackage == null) InstallProgressSection(installState)
-        ScanStatusSection(status, apps.size, onScanClick)
+        RoundedSection {
+            ListItem(
+                colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+                headlineContent = {
+                    Text(
+                        when (status) {
+                            ScanStatus.Scanning -> stringResource(R.string.searching_for_updates)
+                            is ScanStatus.Success -> if (apps.isNotEmpty()) {
+                                stringResource(R.string.updates_available, apps.size)
+                            } else {
+                                stringResource(R.string.all_apps_up_to_date)
+                            }
+                            is ScanStatus.Error -> stringResource(R.string.update_check_failed)
+                            ScanStatus.Idle -> stringResource(R.string.ready_to_check)
+                        }
+                    )
+                },
+                supportingContent = if (status is ScanStatus.Error) {
+                    { Text(status.message) }
+                } else {
+                    null
+                },
+                trailingContent = {
+                    if (status == ScanStatus.Scanning) {
+                        Box(modifier = Modifier.size(48.dp), contentAlignment = Alignment.Center) {
+                            CircularProgressIndicator(modifier = Modifier.size(24.dp))
+                        }
+                    } else {
+                        IconButton(onClick = onScanClick) {
+                            Icon(
+                                imageVector = Icons.Rounded.Refresh,
+                                contentDescription = stringResource(R.string.check_again)
+                            )
+                        }
+                    }
+                }
+            )
+        }
+
+        fileInstalls.forEach { state ->
+            RoundedSection {
+                ListItem(
+                    colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+                    headlineContent = {
+                        Text(state.appName, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    },
+                    trailingContent = {
+                        Box(modifier = Modifier.size(48.dp), contentAlignment = Alignment.Center) {
+                            CircularProgressIndicator(modifier = Modifier.size(24.dp))
+                        }
+                    }
+                )
+            }
+        }
+
         LazyColumn(
             state = listState,
             modifier = Modifier.fillMaxSize(),
@@ -231,9 +279,7 @@ private fun HomeContent(
                     AppListItem(
                         app = app,
                         update = update,
-                        installActive = installActive,
-                        installing = installingPackage == app.packageName,
-                        downloadProgress = (installState as? InstallState.Downloading)?.progress,
+                        installState = installs[app.packageName],
                         onPlayStoreUpdate = { onPlayStoreUpdate(app, update) }
                     )
                 }
@@ -243,73 +289,20 @@ private fun HomeContent(
 }
 
 @Composable
-private fun InstallProgressSection(installState: InstallState) {
-    val appName = when (installState) {
-        is InstallState.Preparing -> installState.appName
-        is InstallState.Downloading -> installState.appName
-        is InstallState.Installing -> installState.appName
-        else -> return
+private fun RoundedSection(content: @Composable () -> Unit) {
+    OutlinedCard(
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+        shape = MaterialTheme.shapes.large
+    ) {
+        content()
     }
-
-    ListItem(
-        headlineContent = { Text(appName, maxLines = 1, overflow = TextOverflow.Ellipsis) },
-        trailingContent = {
-            Box(modifier = Modifier.size(48.dp), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator(modifier = Modifier.size(24.dp))
-            }
-        }
-    )
-}
-
-@Composable
-private fun ScanStatusSection(status: ScanStatus, updatesCount: Int, onScanClick: () -> Unit) {
-    ListItem(
-        headlineContent = {
-            Text(
-                when (status) {
-                    ScanStatus.Scanning -> stringResource(R.string.searching_for_updates)
-                    is ScanStatus.Success -> if (updatesCount > 0) {
-                        stringResource(R.string.updates_available, updatesCount)
-                    } else {
-                        stringResource(R.string.all_apps_up_to_date)
-                    }
-                    is ScanStatus.Error -> stringResource(R.string.update_check_failed)
-                    ScanStatus.Idle -> stringResource(R.string.ready_to_check)
-                }
-            )
-        },
-        supportingContent = if (status is ScanStatus.Error) {
-            { Text(status.message) }
-        } else {
-            null
-        },
-        trailingContent = {
-            if (status == ScanStatus.Scanning) {
-                Box(
-                    modifier = Modifier.size(48.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    CircularProgressIndicator(modifier = Modifier.size(24.dp))
-                }
-            } else {
-                IconButton(onClick = onScanClick) {
-                    Icon(
-                        imageVector = Icons.Rounded.Refresh,
-                        contentDescription = stringResource(R.string.check_again)
-                    )
-                }
-            }
-        }
-    )
 }
 
 @Composable
 private fun AppListItem(
     app: InstalledApp,
     update: AppUpdateInfo,
-    installActive: Boolean,
-    installing: Boolean,
-    downloadProgress: Float?,
+    installState: InstallState?,
     onPlayStoreUpdate: () -> Unit
 ) {
     val context = LocalContext.current
@@ -368,38 +361,28 @@ private fun AppListItem(
                 horizontalArrangement = Arrangement.End,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                OutlinedButton(
-                    onClick = onPlayStoreUpdate,
-                    enabled = installing || !installActive,
-                    shape = MaterialTheme.shapes.extraLarge
-                ) {
+                FilledTonalButton(onClick = onPlayStoreUpdate) {
                     Box(contentAlignment = Alignment.Center) {
                         Text(
                             text = stringResource(R.string.play_store),
-                            modifier = Modifier.alpha(if (installing) 0f else 1f)
+                            modifier = Modifier.alpha(if (installState == null) 1f else 0f)
                         )
-                        if (installing) {
-                            if (downloadProgress != null) {
-                                CircularProgressIndicator(
-                                    progress = { downloadProgress },
-                                    modifier = Modifier.size(20.dp),
-                                    strokeWidth = 2.dp
-                                )
-                            } else {
-                                CircularProgressIndicator(
-                                    modifier = Modifier.size(20.dp),
-                                    strokeWidth = 2.dp
-                                )
-                            }
+                        when (installState) {
+                            null -> Unit
+                            is InstallState.Downloading -> CircularProgressIndicator(
+                                progress = { installState.progress },
+                                modifier = Modifier.size(20.dp),
+                                strokeWidth = 2.dp
+                            )
+                            else -> CircularProgressIndicator(
+                                modifier = Modifier.size(20.dp),
+                                strokeWidth = 2.dp
+                            )
                         }
                     }
                 }
                 Spacer(Modifier.width(8.dp))
-                FilledTonalButton(
-                    onClick = { openUrlInBrowser(context, update.apkMirrorUrl) },
-                    enabled = !installActive,
-                    shape = MaterialTheme.shapes.extraLarge
-                ) {
+                FilledTonalButton(onClick = { openUrlInBrowser(context, update.apkMirrorUrl) }) {
                     Text(stringResource(R.string.apkmirror))
                 }
             }
@@ -425,13 +408,16 @@ private fun SettingsContent(
     onIncludeDisabledAppsChange: (Boolean) -> Unit
 ) {
     Column(modifier) {
-        ListItem(
-            headlineContent = { Text(stringResource(R.string.disabled_apps)) },
-            supportingContent = { Text(stringResource(R.string.disabled_apps_description)) },
-            trailingContent = {
-                Switch(checked = includeDisabledApps, onCheckedChange = onIncludeDisabledAppsChange)
-            }
-        )
+        RoundedSection {
+            ListItem(
+                colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+                headlineContent = { Text(stringResource(R.string.disabled_apps)) },
+                supportingContent = { Text(stringResource(R.string.disabled_apps_description)) },
+                trailingContent = {
+                    Switch(checked = includeDisabledApps, onCheckedChange = onIncludeDisabledAppsChange)
+                }
+            )
+        }
     }
 }
 

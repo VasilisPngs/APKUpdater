@@ -14,20 +14,28 @@ import com.android.gupdater.data.repository.AppUpdateRepository
 import com.android.gupdater.data.repository.ScanStatus
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.util.concurrent.ConcurrentHashMap
+
+sealed interface InstallEvent {
+    data class Finished(val appName: String) : InstallEvent
+    data class Failed(val message: String) : InstallEvent
+}
 
 data class UpdaterUiState(
     val scanStatus: ScanStatus = ScanStatus.Idle,
     val installedApps: List<InstalledApp> = emptyList(),
     val updates: List<AppUpdateInfo> = emptyList(),
     val includeDisabledApps: Boolean = false,
-    val installState: InstallState = InstallState.Idle,
-    val installingPackage: String? = null
+    val installs: Map<String, InstallState> = emptyMap()
 )
 
 class GUpdaterViewModel(application: Application) : AndroidViewModel(application) {
@@ -38,10 +46,12 @@ class GUpdaterViewModel(application: Application) : AndroidViewModel(application
     private val _uiState = MutableStateFlow(
         UpdaterUiState(includeDisabledApps = preferences.includeDisabledApps)
     )
+    private val _events = MutableSharedFlow<InstallEvent>(extraBufferCapacity = 16)
+    private val installJobs = ConcurrentHashMap<String, Job>()
     private var scanJob: Job? = null
-    private var installJob: Job? = null
 
     val uiState: StateFlow<UpdaterUiState> = _uiState.asStateFlow()
+    val events: SharedFlow<InstallEvent> = _events.asSharedFlow()
 
     init {
         refreshInstalledAppsAndScan()
@@ -85,16 +95,12 @@ class GUpdaterViewModel(application: Application) : AndroidViewModel(application
         }
     }
 
-    fun installFromPlay(app: InstalledApp, versionCode: Long) = install(app.packageName) {
-        googlePlayInstaller.install(app, versionCode) { state ->
-            _uiState.update { it.copy(installState = state) }
-        }
+    fun installFromPlay(app: InstalledApp, versionCode: Long) = install(app.packageName) { onState ->
+        googlePlayInstaller.install(app, versionCode, onState)
     }
 
-    fun installBundle(uri: Uri) = install(packageName = null) {
-        bundleInstaller.install(uri) { state ->
-            _uiState.update { it.copy(installState = state) }
-        }
+    fun installBundle(uri: Uri) = install(uri.toString()) { onState ->
+        bundleInstaller.install(uri, onState)
     }
 
     fun setIncludeDisabledApps(include: Boolean) {
@@ -104,25 +110,39 @@ class GUpdaterViewModel(application: Application) : AndroidViewModel(application
         scanForUpdates()
     }
 
-    private fun install(packageName: String?, block: suspend () -> Result<Unit>) {
-        if (installJob?.isActive == true) return
+    private fun install(
+        key: String,
+        block: suspend (onState: (InstallState) -> Unit) -> Result<Unit>
+    ) {
+        if (installJobs.containsKey(key)) return
         scanJob?.cancel()
-        _uiState.update { it.copy(installingPackage = packageName) }
-        installJob = viewModelScope.launch {
-            val result = withContext(Dispatchers.IO) { block() }
-            _uiState.update { it.copy(installingPackage = null) }
+
+        installJobs[key] = viewModelScope.launch {
+            val result = withContext(Dispatchers.IO) {
+                block { state ->
+                    when (state) {
+                        is InstallState.Success -> _events.tryEmit(InstallEvent.Finished(state.appName))
+                        is InstallState.Error -> _events.tryEmit(InstallEvent.Failed(state.message))
+                        else -> Unit
+                    }
+                    _uiState.update { it.copy(installs = it.installs + (key to state)) }
+                }
+            }
+
+            installJobs.remove(key)
+            _uiState.update { it.copy(installs = it.installs - key) }
+
             if (result.isSuccess) {
                 val apps = withContext(Dispatchers.IO) { repository.getInstalledApps() }
                 _uiState.update { it.copy(installedApps = apps) }
-                scanForUpdates()
             }
-            installJob = null
+            if (installJobs.isEmpty()) scanForUpdates()
         }
     }
 
     override fun onCleared() {
         scanJob?.cancel()
-        installJob?.cancel()
+        installJobs.values.forEach(Job::cancel)
         super.onCleared()
     }
 }

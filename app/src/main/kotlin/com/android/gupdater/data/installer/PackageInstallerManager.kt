@@ -7,10 +7,12 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.PackageInstaller
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 class PackageInstallerManager(private val context: Context) {
 
-    suspend fun install(sources: List<ApkSource>): Result<Unit> {
+    suspend fun install(sources: List<ApkSource>): Result<Unit> = sessionLock.withLock {
         if (sources.isEmpty()) return Result.failure(IllegalArgumentException("No APK files to install."))
 
         val installer = context.packageManager.packageInstaller
@@ -81,5 +83,6 @@ class PackageInstallerManager(private val context: Context) {
 
     private companion object {
         const val COPY_BUFFER_SIZE = 64 * 1024
+        val sessionLock = Mutex()
     }
 }

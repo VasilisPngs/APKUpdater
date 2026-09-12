@@ -66,10 +66,7 @@ object PlayDeviceProperties {
                 "SharedLibraries",
                 packageManager.systemSharedLibraryNames.orEmpty().joinToString(separator = ",")
             )
-            setProperty(
-                "Locales",
-                context.assets.locales.joinToString(separator = ",") { it.replace('-', '_') }
-            )
+            setProperty("Locales", locales(context).joinToString(separator = ","))
 
             setProperty(
                 "GL.Version",
@@ -87,6 +84,13 @@ object PlayDeviceProperties {
             setProperty("CellOperator", "310")
             setProperty("SimOperator", "38")
         }
+    }
+
+    private fun locales(context: Context): List<String> {
+        val configured = context.resources.configuration.locales
+        val preferred = (0 until configured.size()).map { configured.get(it).toString() }
+        val supported = context.assets.locales.map { it.replace('-', '_') }
+        return (preferred + supported).filter(String::isNotBlank).distinct()
     }
 
     private fun glExtensions(): List<String> {

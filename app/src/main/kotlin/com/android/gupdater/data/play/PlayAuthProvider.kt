@@ -13,12 +13,15 @@ import java.util.Properties
 
 class PlayAuthProvider(private val context: Context) {
 
-    @Volatile
     private var session: AuthData? = null
 
-    fun current(): AuthData? = session
+    @Synchronized
+    fun session(): AuthData = session ?: create()
 
-    fun create(): AuthData {
+    @Synchronized
+    fun renew(stale: AuthData): AuthData = session.takeIf { it !== stale } ?: create()
+
+    private fun create(): AuthData {
         val properties = PlayDeviceProperties.build(context)
         val credentials = requestAnonymousCredentials(properties)
         return AuthHelper.build(
@@ -29,10 +32,6 @@ class PlayAuthProvider(private val context: Context) {
             properties = properties,
             locale = Locale.getDefault()
         ).also { session = it }
-    }
-
-    fun invalidate() {
-        session = null
     }
 
     private fun requestAnonymousCredentials(properties: Properties): Pair<String, String> {
