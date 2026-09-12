@@ -113,7 +113,7 @@ class AppUpdateRepository(
     private fun playDetails(apps: List<InstalledApp>): Map<String, PlayApp>? =
         runCatching { playCatalog.details(apps.map(InstalledApp::packageName)) }
             .getOrNull()
-            ?.filter { (packageName, playApp) -> isGoogleApp(packageName, playApp.developerName) }
+            ?.filter { (_, playApp) -> isGoogleApp(playApp.developerName) }
 
     private fun merge(
         apkMirrorUpdates: List<AppUpdateInfo>,
@@ -154,12 +154,8 @@ class AppUpdateRepository(
         return byPackage.values.sortedWith(NEWEST_FIRST)
     }
 
-    private fun isGoogleApp(packageName: String, developerName: String): Boolean =
-        if (developerName.isBlank()) {
-            GOOGLE_PACKAGE_PREFIXES.any(packageName::startsWith)
-        } else {
-            developerName.contains(GOOGLE_DEVELOPER, ignoreCase = true)
-        }
+    private fun isGoogleApp(developerName: String): Boolean =
+        developerName.contains(GOOGLE_DEVELOPER, ignoreCase = true)
 
     private fun parseUpdates(
         apps: List<ApkMirrorApp>,
@@ -169,7 +165,7 @@ class AppUpdateRepository(
 
         return apps.mapNotNull { app ->
             val installed = installedByPackage[app.packageName] ?: return@mapNotNull null
-            if (!isGoogleApp(app.packageName, app.developerName)) return@mapNotNull null
+            if (!isGoogleApp(app.developerName)) return@mapNotNull null
             if (!isStableRelease(app.packageName)) return@mapNotNull null
             if (!isStableRelease(app.versionName)) return@mapNotNull null
 
@@ -357,7 +353,6 @@ class AppUpdateRepository(
         val PACKAGE_FLAGS: PackageManager.PackageInfoFlags = PackageManager.PackageInfoFlags.of(
             (PackageManager.GET_SIGNING_CERTIFICATES or PackageManager.MATCH_DISABLED_COMPONENTS).toLong()
         )
-        val GOOGLE_PACKAGE_PREFIXES = listOf("com.google.", "com.android.")
         val UNIVERSAL_ARCHITECTURES = setOf("universal", "noarch")
         val UNIVERSAL_DENSITIES = setOf("nodpi", "anydpi", "universal")
         val DENSITY_BUCKETS = listOf(120, 160, 213, 240, 320, 480, 640)
