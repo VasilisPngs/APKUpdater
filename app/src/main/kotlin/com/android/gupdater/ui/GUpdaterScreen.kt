@@ -31,6 +31,7 @@ import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
@@ -223,11 +224,11 @@ private fun HomeContent(
 private fun ScanStatusSection(status: ScanStatus, updatesCount: Int, onScanClick: () -> Unit) {
     when (status) {
         is ScanStatus.Scanning -> {
-            ListItem(
-                headlineContent = { Text(stringResource(R.string.checking_for_updates)) },
-                supportingContent = {
-                    Text(stringResource(R.string.scan_progress, status.processed, status.total, status.currentBatch))
-                }
+            LinearProgressIndicator(
+                progress = {
+                    if (status.total > 0) status.processed.toFloat() / status.total else 0f
+                },
+                modifier = Modifier.fillMaxWidth()
             )
         }
         is ScanStatus.Success -> {
