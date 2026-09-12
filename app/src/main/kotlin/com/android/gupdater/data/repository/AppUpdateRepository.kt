@@ -171,7 +171,7 @@ class AppUpdateRepository(
 
             val apk = bestApk(app.apks, installed) ?: return@mapNotNull null
             val url = apk.link.toAbsoluteApkMirrorUrl()
-            if (!url.startsWith(GOOGLE_APKMIRROR_PREFIX)) return@mapNotNull null
+            if (GOOGLE_APKMIRROR_PREFIXES.none(url::startsWith)) return@mapNotNull null
 
             AppUpdateInfo(
                 packageName = installed.packageName,
@@ -186,20 +186,25 @@ class AppUpdateRepository(
         }
     }
 
-    private fun bestApk(apks: List<ApkMirrorApk>, installed: InstalledApp): ApkMirrorApk? = apks
-        .asSequence()
-        .filter { it.versionCode > installed.versionCode }
-        .filter { it.minimumApi <= Build.VERSION.SDK_INT }
-        .filter { isStableLink(it.link) }
-        .filter(::matchesFormFactor)
-        .filter { matchesSignature(it, installed) }
-        .filter { abiRank(it) != UNSUPPORTED_ABI }
-        .minWithOrNull(
-            compareBy<ApkMirrorApk> { abiRank(it) }
-                .thenBy(::densityRank)
-                .thenByDescending(ApkMirrorApk::minimumApi)
-                .thenByDescending(ApkMirrorApk::versionCode)
-        )
+    private fun bestApk(apks: List<ApkMirrorApk>, installed: InstalledApp): ApkMirrorApk? {
+        val leanbackApp = isAndroidTv && hasLeanbackLauncher(installed.packageName)
+
+        return apks
+            .asSequence()
+            .filter { it.versionCode > installed.versionCode }
+            .filter { it.minimumApi <= Build.VERSION.SDK_INT }
+            .filter { isStableLink(it.link) }
+            .filter { matchesFormFactor(it, leanbackApp) }
+            .filter { matchesSignature(it, installed) }
+            .filter { abiRank(it) != UNSUPPORTED_ABI }
+            .minWithOrNull(
+                compareBy<ApkMirrorApk> { leanbackRank(it) }
+                    .thenBy(::abiRank)
+                    .thenBy(::densityRank)
+                    .thenByDescending(ApkMirrorApk::minimumApi)
+                    .thenByDescending(ApkMirrorApk::versionCode)
+            )
+    }
 
     private fun abiRank(apk: ApkMirrorApk): Int {
         if (apk.architectures.isEmpty()) return universalAbiRank
@@ -233,14 +238,23 @@ class AppUpdateRepository(
     private fun densityBucket(density: String): Int? =
         DENSITY_ALIASES[density] ?: density.removeSuffix("dpi").toIntOrNull()
 
-    private fun matchesFormFactor(apk: ApkMirrorApk): Boolean {
-        if (apk.capabilities.contains("wear_standalone")) return false
-        return if (isAndroidTv) {
-            apk.capabilities.contains("leanback_standalone") || apk.capabilities.contains("leanback")
-        } else {
-            !apk.capabilities.contains("leanback_standalone")
+    private fun matchesFormFactor(apk: ApkMirrorApk, leanbackApp: Boolean): Boolean {
+        if (apk.capabilities.contains(WEAR_STANDALONE)) return false
+
+        return when {
+            leanbackApp -> apk.isLeanback
+            isAndroidTv -> true
+            else -> !apk.capabilities.contains(LEANBACK_STANDALONE)
         }
     }
+
+    private fun leanbackRank(apk: ApkMirrorApk): Int = if (apk.isLeanback == isAndroidTv) 0 else 1
+
+    private fun hasLeanbackLauncher(packageName: String): Boolean =
+        packageManager.getLeanbackLaunchIntentForPackage(packageName) != null
+
+    private val ApkMirrorApk.isLeanback: Boolean
+        get() = capabilities.contains(LEANBACK) || capabilities.contains(LEANBACK_STANDALONE)
 
     private fun matchesSignature(apk: ApkMirrorApk, installed: InstalledApp): Boolean = when {
         apk.signatureSha256s.isNotEmpty() && installed.signatureSha256s.isNotEmpty() ->
@@ -320,8 +334,10 @@ class AppUpdateRepository(
     private companion object {
         const val API_BATCH_SIZE = 100
         const val APKMIRROR_PATH_PREFIX = "/apk/"
-        const val GOOGLE_APKMIRROR_PREFIX = "https://www.apkmirror.com/apk/google-inc/"
         const val GOOGLE_DEVELOPER = "Google"
+        const val WEAR_STANDALONE = "wear_standalone"
+        const val LEANBACK = "leanback"
+        const val LEANBACK_STANDALONE = "leanback_standalone"
         val NEWEST_FIRST = compareByDescending<AppUpdateInfo> { it.publishedAt ?: Long.MIN_VALUE }
             .thenBy { it.appName.lowercase(Locale.ROOT) }
         val PUBLISH_DATE_FORMATS = listOf(
@@ -340,6 +356,12 @@ class AppUpdateRepository(
             (PackageManager.GET_SIGNING_CERTIFICATES or PackageManager.MATCH_DISABLED_COMPONENTS).toLong()
         )
         val GOOGLE_PACKAGE_PREFIXES = listOf("com.google.", "com.android.")
+        val GOOGLE_APKMIRROR_PREFIXES = listOf(
+            "https://www.apkmirror.com/apk/google-inc/",
+            "https://www.apkmirror.com/apk/research-at-google/",
+            "https://www.apkmirror.com/apk/google-labs/",
+            "https://www.apkmirror.com/apk/google-fiber-inc/"
+        )
         val UNIVERSAL_ARCHITECTURES = setOf("universal", "noarch")
         val UNIVERSAL_DENSITIES = setOf("nodpi", "anydpi", "universal")
         val DENSITY_BUCKETS = listOf(120, 160, 213, 240, 320, 480, 640)
