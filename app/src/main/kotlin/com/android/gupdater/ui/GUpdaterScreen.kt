@@ -234,7 +234,7 @@ private fun HomeContent(
         installs.filterKeys { key -> apps.none { it.packageName == key } }.values.toList()
     }
 
-    Column(modifier = modifier) {
+    Column(modifier = modifier.padding(top = contentPadding.calculateTopPadding())) {
         RoundedSection {
             ListItem(
                 colors = ListItemDefaults.colors(containerColor = Color.Transparent),
