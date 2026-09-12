@@ -117,12 +117,14 @@ class AppUpdateRepository(
                     .filter(::filterMinimumApi)
                     .filter(::filterAndroidTv)
                     .filter(::filterWearOs)
+                    .filter(::filterStableRelease)
                     .filter { it.versionCode > installed.versionCode }
                     .maxByOrNull(AppExistsApk::versionCode)
                     ?: return@mapNotNull null
 
                 val url = bestApk.link.toAbsoluteApkMirrorUrl()
                 if (!url.startsWith(GOOGLE_APKMIRROR_PREFIX)) return@mapNotNull null
+                if (!isStableRelease(release.version) || !isStableRelease(url)) return@mapNotNull null
 
                 AppUpdateInfo(
                     packageName = installed.packageName,
@@ -169,6 +171,14 @@ class AppUpdateRepository(
         ?.let { it <= Build.VERSION.SDK_INT }
         ?: true
 
+    private fun filterStableRelease(apk: AppExistsApk): Boolean =
+        isStableRelease(apk.link)
+
+    private fun isStableRelease(value: String?): Boolean {
+        if (value.isNullOrBlank()) return true
+        return !PRE_RELEASE_MARKER_PATTERN.containsMatchIn(value)
+    }
+
     private fun SigningInfo?.sha1Signatures(): Set<String> = this
         ?.let { signingInfo ->
             val certificates = if (signingInfo.hasMultipleSigners()) {
@@ -195,5 +205,7 @@ class AppUpdateRepository(
         const val API_BATCH_SIZE = 100
         const val GOOGLE_APKMIRROR_PREFIX = "https://www.apkmirror.com/apk/google-inc/"
         val STABLE_RELEASE_EXCLUSIONS = listOf("alpha", "beta")
+        val PRE_RELEASE_MARKER_PATTERN =
+            Regex("(?:^|[^a-z])(alpha|beta|preview|canary|rc|release[-_ ]candidate|pre[-_ ]?release|prerelease|nightly|snapshot|debug|development|dev)(?:[^a-z]|$)", RegexOption.IGNORE_CASE)
     }
 }
