@@ -85,7 +85,7 @@ class GUpdaterViewModel(application: Application) : AndroidViewModel(application
         }
     }
 
-    fun installManual(app: InstalledApp, versionCode: Long) = install(app.packageName) {
+    fun installFromPlay(app: InstalledApp, versionCode: Long) = install(app.packageName) {
         googlePlayInstaller.install(app, versionCode) { state ->
             _uiState.update { it.copy(installState = state) }
         }

@@ -62,6 +62,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -189,7 +190,7 @@ fun GUpdaterScreen(
                 installState = uiState.installState,
                 installingPackage = uiState.installingPackage,
                 onScanClick = viewModel::scanForUpdates,
-                onManualUpdate = { app, update -> viewModel.installManual(app, update.newVersionCode) }
+                onPlayStoreUpdate = { app, update -> viewModel.installFromPlay(app, update.newVersionCode) }
             )
             AppTab.Settings -> SettingsContent(
                 modifier = Modifier.fillMaxSize().padding(innerPadding).navigationBarsPadding(),
@@ -210,7 +211,7 @@ private fun HomeContent(
     installState: InstallState,
     installingPackage: String?,
     onScanClick: () -> Unit,
-    onManualUpdate: (InstalledApp, AppUpdateInfo) -> Unit
+    onPlayStoreUpdate: (InstalledApp, AppUpdateInfo) -> Unit
 ) {
     val installActive = installState is InstallState.Preparing ||
         installState is InstallState.Downloading ||
@@ -233,7 +234,7 @@ private fun HomeContent(
                         installActive = installActive,
                         installing = installingPackage == app.packageName,
                         downloadProgress = (installState as? InstallState.Downloading)?.progress,
-                        onManualUpdate = { onManualUpdate(app, update) }
+                        onPlayStoreUpdate = { onPlayStoreUpdate(app, update) }
                     )
                 }
             }
@@ -309,7 +310,7 @@ private fun AppListItem(
     installActive: Boolean,
     installing: Boolean,
     downloadProgress: Float?,
-    onManualUpdate: () -> Unit
+    onPlayStoreUpdate: () -> Unit
 ) {
     val context = LocalContext.current
     val iconBitmap by produceState<Bitmap?>(initialValue = null, key1 = app.packageName) {
@@ -343,12 +344,20 @@ private fun AppListItem(
                     )
                     Spacer(Modifier.height(4.dp))
                     Text(
-                        text = stringResource(R.string.version_display, app.versionName, app.versionCode),
+                        text = stringResource(
+                            R.string.version_current,
+                            app.versionName,
+                            app.versionCode
+                        ),
                         style = MaterialTheme.typography.bodyLarge
                     )
                     Spacer(Modifier.height(4.dp))
                     Text(
-                        text = stringResource(R.string.version_display, update.newVersionName, update.newVersionCode),
+                        text = stringResource(
+                            R.string.version_latest,
+                            update.newVersionName,
+                            update.newVersionCode
+                        ),
                         style = MaterialTheme.typography.bodyLarge
                     )
                 }
@@ -359,18 +368,30 @@ private fun AppListItem(
                 horizontalArrangement = Arrangement.End,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                when {
-                    installing && downloadProgress != null -> CircularProgressIndicator(
-                        progress = { downloadProgress },
-                        modifier = Modifier.size(40.dp)
-                    )
-                    installing -> CircularProgressIndicator(modifier = Modifier.size(40.dp))
-                    else -> OutlinedButton(
-                        onClick = onManualUpdate,
-                        enabled = !installActive,
-                        shape = MaterialTheme.shapes.extraLarge
-                    ) {
-                        Text(stringResource(R.string.manual))
+                OutlinedButton(
+                    onClick = onPlayStoreUpdate,
+                    enabled = installing || !installActive,
+                    shape = MaterialTheme.shapes.extraLarge
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Text(
+                            text = stringResource(R.string.play_store),
+                            modifier = Modifier.alpha(if (installing) 0f else 1f)
+                        )
+                        if (installing) {
+                            if (downloadProgress != null) {
+                                CircularProgressIndicator(
+                                    progress = { downloadProgress },
+                                    modifier = Modifier.size(20.dp),
+                                    strokeWidth = 2.dp
+                                )
+                            } else {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(20.dp),
+                                    strokeWidth = 2.dp
+                                )
+                            }
+                        }
                     }
                 }
                 Spacer(Modifier.width(8.dp))
@@ -379,7 +400,7 @@ private fun AppListItem(
                     enabled = !installActive,
                     shape = MaterialTheme.shapes.extraLarge
                 ) {
-                    Text(stringResource(R.string.update))
+                    Text(stringResource(R.string.apkmirror))
                 }
             }
         }
