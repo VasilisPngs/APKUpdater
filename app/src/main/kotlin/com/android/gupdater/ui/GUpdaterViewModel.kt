@@ -49,6 +49,7 @@ class GUpdaterViewModel(application: Application) : AndroidViewModel(application
     private val _events = MutableSharedFlow<InstallEvent>(extraBufferCapacity = 16)
     private val installJobs = ConcurrentHashMap<String, Job>()
     private var scanJob: Job? = null
+    private var installFailed = false
 
     val uiState: StateFlow<UpdaterUiState> = _uiState.asStateFlow()
     val events: SharedFlow<InstallEvent> = _events.asSharedFlow()
@@ -66,6 +67,7 @@ class GUpdaterViewModel(application: Application) : AndroidViewModel(application
     }
 
     fun scanForUpdates() {
+        installFailed = false
         scanJob?.cancel()
         scanJob = viewModelScope.launch {
             val state = _uiState.value
@@ -131,6 +133,7 @@ class GUpdaterViewModel(application: Application) : AndroidViewModel(application
 
             installJobs.remove(key)
             _uiState.update { it.copy(installs = it.installs - key) }
+            if (result.isFailure) installFailed = true
 
             if (result.isSuccess) {
                 val apps = withContext(Dispatchers.IO) { repository.getInstalledApps() }
@@ -144,7 +147,10 @@ class GUpdaterViewModel(application: Application) : AndroidViewModel(application
                     )
                 }
             }
-            if (installJobs.isEmpty()) scanForUpdates()
+            if (installJobs.isEmpty()) {
+                if (!installFailed) scanForUpdates()
+                installFailed = false
+            }
         }
     }
 
