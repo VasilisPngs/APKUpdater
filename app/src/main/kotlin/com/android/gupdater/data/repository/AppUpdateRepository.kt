@@ -36,7 +36,9 @@ class AppUpdateRepository(
     private val isAndroidTv = packageManager.hasSystemFeature(PackageManager.FEATURE_LEANBACK)
     private val deviceAbis = Build.SUPPORTED_ABIS.map(String::lowercase)
     private val universalAbiRank = deviceAbis.size
-    private val deviceDensity = context.resources.displayMetrics.densityDpi
+    private val deviceDensityBucket = DENSITY_BUCKETS
+        .firstOrNull { it >= context.resources.displayMetrics.densityDpi }
+        ?: DENSITY_BUCKETS.last()
 
     suspend fun getInstalledApps(): List<InstalledApp> = withContext(Dispatchers.IO) {
         packageManager.getInstalledPackages(PACKAGE_FLAGS)
@@ -145,30 +147,18 @@ class AppUpdateRepository(
     }
 
     private fun densityRank(apk: ApkMirrorApk): Int {
-        if (apk.densities.isEmpty()) return UNIVERSAL_DENSITY_RANK
+        if (apk.densities.any { it in UNIVERSAL_DENSITIES }) return UNIVERSAL_DENSITY_RANK
 
-        var matched = false
-        var recognised = false
-        for (density in apk.densities) {
-            if (density in UNIVERSAL_DENSITIES) return UNIVERSAL_DENSITY_RANK
-            val range = densityRange(density) ?: continue
-            recognised = true
-            if (deviceDensity in range) matched = true
-        }
-
+        val buckets = apk.densities.mapNotNull(::densityBucket)
         return when {
-            matched -> MATCHING_DENSITY_RANK
-            recognised -> FOREIGN_DENSITY_RANK
-            else -> UNIVERSAL_DENSITY_RANK
+            buckets.isEmpty() -> UNIVERSAL_DENSITY_RANK
+            deviceDensityBucket in buckets -> MATCHING_DENSITY_RANK
+            else -> FOREIGN_DENSITY_RANK
         }
     }
 
-    private fun densityRange(density: String): IntRange? {
-        DENSITY_BUCKETS[density]?.let { return it..it }
-        val bounds = DENSITY_NUMBER_PATTERN.findAll(density).mapNotNull { it.value.toIntOrNull() }.toList()
-        if (bounds.isEmpty()) return null
-        return bounds.min()..bounds.max()
-    }
+    private fun densityBucket(density: String): Int? =
+        DENSITY_ALIASES[density] ?: density.removeSuffix("dpi").toIntOrNull()
 
     private fun matchesFormFactor(apk: ApkMirrorApk): Boolean {
         if (apk.capabilities.contains("wear_standalone")) return false
@@ -244,7 +234,8 @@ class AppUpdateRepository(
         )
         val UNIVERSAL_ARCHITECTURES = setOf("universal", "noarch")
         val UNIVERSAL_DENSITIES = setOf("nodpi", "anydpi", "universal")
-        val DENSITY_BUCKETS = mapOf(
+        val DENSITY_BUCKETS = listOf(120, 160, 213, 240, 320, 480, 640)
+        val DENSITY_ALIASES = mapOf(
             "ldpi" to 120,
             "mdpi" to 160,
             "tvdpi" to 213,
@@ -253,7 +244,6 @@ class AppUpdateRepository(
             "xxhdpi" to 480,
             "xxxhdpi" to 640
         )
-        val DENSITY_NUMBER_PATTERN = Regex("\\d+")
         val PRE_RELEASE_MARKER_PATTERN =
             Regex("(?:^|[^a-z])(alpha|beta|preview|canary|rc|release[-_ ]candidate|pre[-_ ]?release|prerelease|nightly|snapshot|debug|development|dev)(?:[^a-z]|$)", RegexOption.IGNORE_CASE)
     }
