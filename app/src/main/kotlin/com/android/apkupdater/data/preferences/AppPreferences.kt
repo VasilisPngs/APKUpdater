@@ -1,4 +1,4 @@
-package com.android.apkupdater.data.preferences
+package com.android.gupdater.data.preferences
 
 import android.content.Context
 

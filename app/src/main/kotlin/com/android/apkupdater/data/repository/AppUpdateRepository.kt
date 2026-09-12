@@ -1,16 +1,16 @@
-package com.android.apkupdater.data.repository
+package com.android.gupdater.data.repository
 
 import android.content.Context
 import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
 import android.content.pm.SigningInfo
 import android.os.Build
-import com.android.apkupdater.data.api.ApkMirrorService
-import com.android.apkupdater.data.model.AppExistsApk
-import com.android.apkupdater.data.model.AppExistsRequest
-import com.android.apkupdater.data.model.AppExistsResponseData
-import com.android.apkupdater.data.model.AppUpdateInfo
-import com.android.apkupdater.data.model.InstalledApp
+import com.android.gupdater.data.api.ApkMirrorService
+import com.android.gupdater.data.model.AppExistsApk
+import com.android.gupdater.data.model.AppExistsRequest
+import com.android.gupdater.data.model.AppExistsResponseData
+import com.android.gupdater.data.model.AppUpdateInfo
+import com.android.gupdater.data.model.InstalledApp
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow

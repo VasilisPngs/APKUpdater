@@ -1,15 +1,15 @@
-package com.android.apkupdater.ui
+package com.android.gupdater.ui
 
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
-import com.android.apkupdater.data.installer.GooglePlayInstaller
-import com.android.apkupdater.data.model.AppUpdateInfo
-import com.android.apkupdater.data.model.InstalledApp
-import com.android.apkupdater.data.model.InstallState
-import com.android.apkupdater.data.preferences.AppPreferences
-import com.android.apkupdater.data.repository.AppUpdateRepository
-import com.android.apkupdater.data.repository.ScanStatus
+import com.android.gupdater.data.installer.GooglePlayInstaller
+import com.android.gupdater.data.model.AppUpdateInfo
+import com.android.gupdater.data.model.InstalledApp
+import com.android.gupdater.data.model.InstallState
+import com.android.gupdater.data.preferences.AppPreferences
+import com.android.gupdater.data.repository.AppUpdateRepository
+import com.android.gupdater.data.repository.ScanStatus
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow

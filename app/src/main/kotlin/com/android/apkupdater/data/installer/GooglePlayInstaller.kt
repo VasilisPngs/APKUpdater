@@ -1,8 +1,8 @@
-package com.android.apkupdater.data.installer
+package com.android.gupdater.data.installer
 
 import android.content.Context
-import com.android.apkupdater.data.model.InstalledApp
-import com.android.apkupdater.data.model.InstallState
+import com.android.gupdater.data.model.InstalledApp
+import com.android.gupdater.data.model.InstallState
 import com.aurora.gplayapi.data.models.PlayFile
 import com.aurora.gplayapi.helpers.AppDetailsHelper
 import com.aurora.gplayapi.helpers.AuthHelper

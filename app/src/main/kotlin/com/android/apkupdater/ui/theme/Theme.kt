@@ -1,4 +1,4 @@
-package com.android.apkupdater.ui.theme
+package com.android.gupdater.ui.theme
 
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
