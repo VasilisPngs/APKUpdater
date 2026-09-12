@@ -14,9 +14,10 @@ import com.android.gupdater.data.play.PlayCatalog
 import com.android.gupdater.data.preferences.AppPreferences
 import com.android.gupdater.data.repository.AppUpdateRepository
 import com.android.gupdater.data.repository.ScanStatus
-import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -26,6 +27,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import java.util.concurrent.ConcurrentHashMap
 
 sealed interface InstallEvent {
@@ -55,7 +57,6 @@ class GUpdaterViewModel(application: Application) : AndroidViewModel(application
     private val _events = MutableSharedFlow<InstallEvent>(extraBufferCapacity = 16)
     private val installJobs = ConcurrentHashMap<String, Job>()
     private var scanJob: Job? = null
-    private var playJob: Job? = null
 
     val uiState: StateFlow<UpdaterUiState> = _uiState.asStateFlow()
     val events: SharedFlow<InstallEvent> = _events.asSharedFlow()
@@ -77,27 +78,43 @@ class GUpdaterViewModel(application: Application) : AndroidViewModel(application
                 }
             }
             val appsToCheck = allApps.filter { state.includeDisabledApps || it.isEnabled }
+            val session = async(Dispatchers.IO) { runCatching { playCatalog.warmUp() } }
 
             repository.scanForUpdates(appsToCheck).collect { status ->
-                _uiState.update { current ->
-                    when (status) {
-                        ScanStatus.Scanning -> current.copy(
-                            scanStatus = status,
-                            updates = emptyList()
-                        )
-                        is ScanStatus.Success -> current.copy(
-                            scanStatus = status,
-                            updates = status.updates
-                        )
-                        is ScanStatus.Error -> current.copy(
-                            scanStatus = status,
-                            updates = status.partialUpdates
-                        )
+                when (status) {
+                    ScanStatus.Scanning -> _uiState.update {
+                        it.copy(scanStatus = status, updates = emptyList())
                     }
+                    is ScanStatus.Success -> publish(status, status.updates, session)
+                    is ScanStatus.Error -> publish(status, status.partialUpdates, session)
                 }
-                if (status !is ScanStatus.Scanning) refreshPlayAvailability()
             }
         }
+    }
+
+    private suspend fun publish(
+        status: ScanStatus,
+        updates: List<AppUpdateInfo>,
+        session: Deferred<Result<Unit>>
+    ) {
+        val playPackages = playAvailability(updates, session)
+        _uiState.update {
+            it.copy(scanStatus = status, updates = updates, playPackages = playPackages)
+        }
+    }
+
+    private suspend fun playAvailability(
+        updates: List<AppUpdateInfo>,
+        session: Deferred<Result<Unit>>
+    ): Set<String>? {
+        if (updates.isEmpty()) return null
+        if (session.await().isFailure) return null
+
+        val lookup = viewModelScope.async(Dispatchers.IO) {
+            runCatching { playCatalog.availablePackages(updates.map(AppUpdateInfo::packageName)) }
+                .getOrNull()
+        }
+        return withTimeoutOrNull(PLAY_LOOKUP_TIMEOUT) { lookup.await() }
     }
 
     fun installFromPlay(app: InstalledApp, versionCode: Long) =
@@ -171,27 +188,13 @@ class GUpdaterViewModel(application: Application) : AndroidViewModel(application
         }
     }
 
-    private fun refreshPlayAvailability() {
-        val packageNames = _uiState.value.updates.map(AppUpdateInfo::packageName)
-        if (packageNames.isEmpty()) return
-
-        playJob?.cancel()
-        playJob = viewModelScope.launch(Dispatchers.IO) {
-            val available = try {
-                playCatalog.availablePackages(packageNames)
-            } catch (exception: CancellationException) {
-                throw exception
-            } catch (_: Exception) {
-                return@launch
-            }
-            _uiState.update { it.copy(playPackages = available) }
-        }
-    }
-
     override fun onCleared() {
         scanJob?.cancel()
-        playJob?.cancel()
         installJobs.values.forEach(Job::cancel)
         super.onCleared()
+    }
+
+    private companion object {
+        const val PLAY_LOOKUP_TIMEOUT = 10_000L
     }
 }
