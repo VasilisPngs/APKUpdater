@@ -13,7 +13,7 @@
 - Keep code clean, direct, idiomatic and maintainable.
 - All code is written in English.
 - Do not add explanatory or redundant comments inside code.
-- Use the latest appropriate official technologies, APIs, libraries and tools. Preview, beta, release candidate, alpha and canary are allowed when they are the newest appropriate choice.
+- Use the latest appropriate official technologies, APIs, libraries and tools, and only their stable releases. Never depend on a preview, alpha, beta, release candidate or canary version.
 - Verify current versions from official sources rather than relying on outdated examples.
 - Do not add a numeric product version to the visible product identity, release name, APK filename, release tag, or API User-Agent unless explicitly requested.
 
