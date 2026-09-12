@@ -1,4 +1,4 @@
-package com.android.apkupdater.data.model
+package com.android.gupdater.data.model
 
 import com.squareup.moshi.Json
 
