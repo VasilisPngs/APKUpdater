@@ -176,7 +176,7 @@ class AppUpdateRepository(
         .asSequence()
         .filter { it.versionCode > installed.versionCode }
         .filter { it.minimumApi <= Build.VERSION.SDK_INT }
-        .filter { isStableRelease(applicationSlug(it.link)) }
+        .filter { isStableLink(it.link) }
         .filter(::matchesFormFactor)
         .filter { matchesSignature(it, installed) }
         .filter { abiRank(it) != UNSUPPORTED_ABI }
@@ -259,8 +259,11 @@ class AppUpdateRepository(
         return null
     }
 
-    private fun applicationSlug(link: String): String =
-        link.substringAfter(APKMIRROR_PATH_PREFIX, "").split('/').getOrNull(1).orEmpty()
+    private fun isStableLink(link: String): Boolean = link
+        .substringAfter(APKMIRROR_PATH_PREFIX, "")
+        .split('/')
+        .drop(1)
+        .all(::isStableRelease)
 
     private fun isStableRelease(value: String): Boolean =
         value.isBlank() || !PRE_RELEASE_MARKER_PATTERN.containsMatchIn(value)
