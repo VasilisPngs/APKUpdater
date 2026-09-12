@@ -1,4 +1,4 @@
-# GUpdater Project Instructions
+# Projects Instructions
 
 ## Git & Repository Workflow
 - Push direct changes to `main`; do not open Pull Requests.
