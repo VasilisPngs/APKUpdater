@@ -10,7 +10,7 @@ android {
 
     defaultConfig {
         applicationId = "com.android.gupdater"
-        minSdk = 36
+        minSdk = 34
         targetSdk = 37
         versionCode = (System.currentTimeMillis() / 1000).toInt()
         versionName = "GUpdater"
