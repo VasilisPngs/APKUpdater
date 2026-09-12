@@ -6,6 +6,7 @@ plugins {
 android {
     namespace = "com.android.gupdater"
     compileSdk = 37
+    compileSdkMinor = 2
 
     defaultConfig {
         applicationId = "com.android.gupdater"
