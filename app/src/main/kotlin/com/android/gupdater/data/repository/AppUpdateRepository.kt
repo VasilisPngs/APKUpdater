@@ -1,7 +1,6 @@
 package com.android.gupdater.data.repository
 
 import android.content.Context
-import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
 import android.content.pm.SigningInfo
 import android.os.Build
@@ -42,8 +41,6 @@ class AppUpdateRepository(
         ).mapNotNull { packageInfo ->
             runCatching {
                 val appInfo = packageInfo.applicationInfo ?: return@mapNotNull null
-                val isSystem = (appInfo.flags and ApplicationInfo.FLAG_SYSTEM) != 0 ||
-                    (appInfo.flags and ApplicationInfo.FLAG_UPDATED_SYSTEM_APP) != 0
 
                 InstalledApp(
                     packageName = packageInfo.packageName,
@@ -52,7 +49,6 @@ class AppUpdateRepository(
                     versionName = packageInfo.versionName ?: "Unknown",
                     versionCode = packageInfo.longVersionCode,
                     signatureSha1s = packageInfo.signingInfo.sha1Signatures(),
-                    isSystemApp = isSystem,
                     isEnabled = appInfo.enabled
                 )
             }.getOrNull()

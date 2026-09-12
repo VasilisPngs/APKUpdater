@@ -68,8 +68,8 @@ private enum class AppTab(val labelRes: Int) {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ApkUpdaterScreen(
-    viewModel: ApkUpdaterViewModel,
+fun GUpdaterScreen(
+    viewModel: GUpdaterViewModel,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current

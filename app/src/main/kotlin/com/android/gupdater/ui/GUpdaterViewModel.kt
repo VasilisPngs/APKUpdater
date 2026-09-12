@@ -27,7 +27,7 @@ data class UpdaterUiState(
     val installState: InstallState = InstallState.Idle
 )
 
-class ApkUpdaterViewModel(application: Application) : AndroidViewModel(application) {
+class GUpdaterViewModel(application: Application) : AndroidViewModel(application) {
     private val repository = AppUpdateRepository(application.applicationContext)
     private val preferences = AppPreferences(application.applicationContext)
     private val installer = GooglePlayInstaller(application.applicationContext)
