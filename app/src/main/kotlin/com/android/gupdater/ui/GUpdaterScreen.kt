@@ -14,11 +14,9 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -31,6 +29,8 @@ import androidx.compose.material.icons.rounded.Home
 import androidx.compose.material.icons.rounded.MoreVert
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.Settings
+import androidx.compose.material3.BottomAppBar
+import androidx.compose.material3.BottomAppBarDefaults
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
@@ -43,9 +43,9 @@ import androidx.compose.material3.ListItem
 import androidx.compose.material3.Card
 import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Switch
@@ -64,6 +64,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
@@ -104,13 +105,18 @@ fun GUpdaterScreen(
     val bundlePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         uri?.let(viewModel::installBundle)
     }
+    val bottomBarScrollBehavior = BottomAppBarDefaults.exitAlwaysScrollBehavior()
 
     LaunchedEffect(Unit) {
         viewModel.events.collect { event ->
             snackbarHostState.showSnackbar(
-                when (event) {
+                message = when (event) {
                     is InstallEvent.Finished -> context.getString(R.string.update_installed, event.appName)
                     is InstallEvent.Failed -> context.getString(R.string.update_failed, event.message)
+                },
+                duration = when (event) {
+                    is InstallEvent.Finished -> SnackbarDuration.Short
+                    is InstallEvent.Failed -> SnackbarDuration.Long
                 }
             )
         }
@@ -126,8 +132,9 @@ fun GUpdaterScreen(
     }
 
     Scaffold(
-        modifier = modifier.fillMaxSize(),
-        contentWindowInsets = WindowInsets(0, 0, 0, 0),
+        modifier = modifier
+            .fillMaxSize()
+            .nestedScroll(bottomBarScrollBehavior.nestedScrollConnection),
         topBar = {
             CenterAlignedTopAppBar(
                 title = { Text(stringResource(R.string.app_name)) },
@@ -155,7 +162,10 @@ fun GUpdaterScreen(
             )
         },
         bottomBar = {
-            NavigationBar {
+            BottomAppBar(
+                scrollBehavior = bottomBarScrollBehavior,
+                contentPadding = PaddingValues(0.dp)
+            ) {
                 AppTab.entries.forEach { tab ->
                     NavigationBarItem(
                         selected = selectedTab == tab,
@@ -184,7 +194,8 @@ fun GUpdaterScreen(
     ) { innerPadding ->
         when (selectedTab) {
             AppTab.Home -> HomeContent(
-                modifier = Modifier.fillMaxSize().padding(innerPadding),
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = innerPadding,
                 status = uiState.scanStatus,
                 apps = appsWithUpdates,
                 updateMap = updateMap,
@@ -194,7 +205,7 @@ fun GUpdaterScreen(
                 onPlayStoreUpdate = { app, update -> viewModel.installFromPlay(app, update.newVersionCode) }
             )
             AppTab.Settings -> SettingsContent(
-                modifier = Modifier.fillMaxSize().padding(innerPadding).navigationBarsPadding(),
+                modifier = Modifier.fillMaxSize().padding(innerPadding),
                 includeDisabledApps = uiState.includeDisabledApps,
                 onIncludeDisabledAppsChange = viewModel::setIncludeDisabledApps
             )
@@ -205,6 +216,7 @@ fun GUpdaterScreen(
 @Composable
 private fun HomeContent(
     modifier: Modifier,
+    contentPadding: PaddingValues,
     status: ScanStatus,
     apps: List<InstalledApp>,
     updateMap: Map<String, AppUpdateInfo>,
@@ -231,7 +243,6 @@ private fun HomeContent(
                                 stringResource(R.string.all_apps_up_to_date)
                             }
                             is ScanStatus.Error -> stringResource(R.string.update_check_failed)
-                            ScanStatus.Idle -> stringResource(R.string.ready_to_check)
                         }
                     )
                 },
@@ -276,7 +287,12 @@ private fun HomeContent(
         LazyColumn(
             state = listState,
             modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(16.dp),
+            contentPadding = PaddingValues(
+                start = 16.dp,
+                top = 16.dp,
+                end = 16.dp,
+                bottom = contentPadding.calculateBottomPadding() + 16.dp
+            ),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             items(apps, key = { it.packageName }) { app ->

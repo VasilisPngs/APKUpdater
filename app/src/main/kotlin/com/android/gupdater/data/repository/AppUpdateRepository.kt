@@ -22,7 +22,6 @@ import kotlinx.coroutines.withContext
 import java.security.MessageDigest
 
 sealed interface ScanStatus {
-    data object Idle : ScanStatus
     data object Scanning : ScanStatus
     data class Success(val updates: List<AppUpdateInfo>) : ScanStatus
     data class Error(val message: String, val partialUpdates: List<AppUpdateInfo>) : ScanStatus

@@ -31,7 +31,7 @@ sealed interface InstallEvent {
 }
 
 data class UpdaterUiState(
-    val scanStatus: ScanStatus = ScanStatus.Idle,
+    val scanStatus: ScanStatus = ScanStatus.Scanning,
     val installedApps: List<InstalledApp> = emptyList(),
     val updates: List<AppUpdateInfo> = emptyList(),
     val includeDisabledApps: Boolean = false,
@@ -90,7 +90,6 @@ class GUpdaterViewModel(application: Application) : AndroidViewModel(application
                             scanStatus = status,
                             updates = status.partialUpdates
                         )
-                        ScanStatus.Idle -> current.copy(scanStatus = status)
                     }
                 }
             }

@@ -46,8 +46,7 @@ class PackageInstallerManager(private val context: Context) {
                     }
                     else -> {
                         val message = intent.getStringExtra(PackageInstaller.EXTRA_STATUS_MESSAGE)
-                            ?: "Installation failed"
-                        result.complete(Result.failure(IllegalStateException(message)))
+                        result.complete(Result.failure(IllegalStateException(failureMessage(message))))
                     }
                 }
             }
@@ -81,8 +80,18 @@ class PackageInstallerManager(private val context: Context) {
         }
     }
 
+    private fun failureMessage(message: String?): String {
+        val library = message?.let { MISSING_LIBRARY_PATTERN.find(it)?.groupValues?.get(1) }
+        return when {
+            library != null -> "Requires the shared library $library, install it first."
+            !message.isNullOrBlank() -> message
+            else -> "Installation failed"
+        }
+    }
+
     private companion object {
         const val COPY_BUFFER_SIZE = 64 * 1024
         val sessionLock = Mutex()
+        val MISSING_LIBRARY_PATTERN = Regex("shared library ([^\\s;]+)")
     }
 }
