@@ -32,7 +32,8 @@ class AppUpdateRepository(
 ) {
     private val packageManager = context.packageManager
     private val isAndroidTv = packageManager.hasSystemFeature(PackageManager.FEATURE_LEANBACK)
-    private val deviceAbis = Build.SUPPORTED_ABIS.map(String::lowercase).toSet()
+    private val deviceAbis = Build.SUPPORTED_ABIS.map(String::lowercase)
+    private val universalAbiRank = deviceAbis.size
 
     suspend fun getInstalledApps(): List<InstalledApp> = withContext(Dispatchers.IO) {
         packageManager.getInstalledPackages(
@@ -121,30 +122,66 @@ class AppUpdateRepository(
 
         return apps.mapNotNull { app ->
             val installed = installedByPackage[app.packageName] ?: return@mapNotNull null
-            val bestApk = app.apks.asSequence()
-                .filter { apk -> filterSignature(apk, installed.signatureSha1s) }
-                .filter(::filterArchitecture)
-                .filter(::filterMinimumApi)
-                .filter(::filterAndroidTv)
-                .filter(::filterWearOs)
-                .filter { isStableRelease(it.link) }
-                .filter { it.versionCode > installed.versionCode }
-                .maxByOrNull(ApkMirrorApk::versionCode)
-                ?: return@mapNotNull null
-
-            val url = bestApk.link.toAbsoluteApkMirrorUrl()
-            if (!url.startsWith(GOOGLE_APKMIRROR_PREFIX)) return@mapNotNull null
             if (!isStableRelease(app.versionName)) return@mapNotNull null
+
+            val apk = bestApk(app.apks, installed) ?: return@mapNotNull null
+            val url = apk.link.toAbsoluteApkMirrorUrl()
+            if (!url.startsWith(GOOGLE_APKMIRROR_PREFIX)) return@mapNotNull null
 
             AppUpdateInfo(
                 packageName = installed.packageName,
                 appName = label(installed.packageName),
                 newVersionName = app.versionName,
-                newVersionCode = bestApk.versionCode,
+                newVersionCode = apk.versionCode,
                 apkMirrorUrl = url
             )
         }
     }
+
+    private fun bestApk(apks: List<ApkMirrorApk>, installed: InstalledApp): ApkMirrorApk? = apks
+        .asSequence()
+        .filter { it.versionCode > installed.versionCode }
+        .filter { it.minimumApi <= Build.VERSION.SDK_INT }
+        .filter { isStableRelease(it.link) }
+        .filter(::matchesFormFactor)
+        .filter { matchesSignature(it, installed.signatureSha1s) }
+        .filter { abiRank(it) != UNSUPPORTED_ABI }
+        .minWithOrNull(
+            compareBy<ApkMirrorApk> { abiRank(it) }
+                .thenByDescending(ApkMirrorApk::minimumApi)
+                .thenByDescending(ApkMirrorApk::versionCode)
+        )
+
+    private fun abiRank(apk: ApkMirrorApk): Int {
+        if (apk.architectures.isEmpty()) return universalAbiRank
+        val architectures = apk.architectures.map(String::lowercase)
+        if (architectures.any { it == "universal" || it == "noarch" }) return universalAbiRank
+        return architectures.minOf(::abiIndex)
+    }
+
+    private fun abiIndex(architecture: String): Int {
+        val index = deviceAbis.indexOf(architecture)
+        if (index >= 0) return index
+        if (architecture == "arm") {
+            return deviceAbis
+                .indexOfFirst { it == "armeabi-v7a" || it == "arm64-v8a" }
+                .takeIf { it >= 0 }
+                ?: UNSUPPORTED_ABI
+        }
+        return UNSUPPORTED_ABI
+    }
+
+    private fun matchesFormFactor(apk: ApkMirrorApk): Boolean {
+        if (apk.capabilities.contains("wear_standalone")) return false
+        return if (isAndroidTv) {
+            apk.capabilities.contains("leanback_standalone") || apk.capabilities.contains("leanback")
+        } else {
+            !apk.capabilities.contains("leanback_standalone")
+        }
+    }
+
+    private fun matchesSignature(apk: ApkMirrorApk, installedSignatures: Set<String>): Boolean =
+        apk.signatureSha1s.isEmpty() || apk.signatureSha1s.any { it in installedSignatures }
 
     private fun label(packageName: String): String = runCatching {
         packageManager.getApplicationInfo(packageName, PackageManager.ApplicationInfoFlags.of(0))
@@ -152,31 +189,6 @@ class AppUpdateRepository(
             .toString()
             .trim()
     }.getOrNull()?.ifEmpty { null } ?: packageName
-
-    private fun filterSignature(apk: ApkMirrorApk, installedSignatures: Set<String>): Boolean =
-        apk.signatureSha1s.isEmpty() || apk.signatureSha1s.any { it in installedSignatures }
-
-    private fun filterArchitecture(apk: ApkMirrorApk): Boolean {
-        if (apk.architectures.isEmpty()) return true
-        val arches = apk.architectures.map(String::lowercase)
-        if (arches.any { it == "universal" || it == "noarch" }) return true
-        return arches.any { arch ->
-            arch in deviceAbis ||
-                (arch == "arm" && deviceAbis.any { it == "armeabi-v7a" || it == "arm64-v8a" })
-        }
-    }
-
-    private fun filterAndroidTv(apk: ApkMirrorApk): Boolean = if (isAndroidTv) {
-        apk.capabilities.contains("leanback_standalone") || apk.capabilities.contains("leanback")
-    } else {
-        !apk.capabilities.contains("leanback_standalone")
-    }
-
-    private fun filterWearOs(apk: ApkMirrorApk): Boolean =
-        !apk.capabilities.contains("wear_standalone")
-
-    private fun filterMinimumApi(apk: ApkMirrorApk): Boolean =
-        apk.minimumApi <= Build.VERSION.SDK_INT
 
     private fun isStableRelease(value: String): Boolean =
         value.isBlank() || !PRE_RELEASE_MARKER_PATTERN.containsMatchIn(value)
@@ -205,6 +217,7 @@ class AppUpdateRepository(
 
     private companion object {
         const val API_BATCH_SIZE = 100
+        const val UNSUPPORTED_ABI = Int.MAX_VALUE
         const val GOOGLE_APKMIRROR_PREFIX = "https://www.apkmirror.com/apk/google-inc/"
         val PRE_RELEASE_MARKER_PATTERN =
             Regex("(?:^|[^a-z])(alpha|beta|preview|canary|rc|release[-_ ]candidate|pre[-_ ]?release|prerelease|nightly|snapshot|debug|development|dev)(?:[^a-z]|$)", RegexOption.IGNORE_CASE)
