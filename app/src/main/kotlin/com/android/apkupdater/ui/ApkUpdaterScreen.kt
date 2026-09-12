@@ -206,9 +206,8 @@ fun ApkUpdaterScreen(
                 updateMap = updateMap,
                 listState = homeListState,
                 installs = uiState.installs,
-                playPackages = uiState.playPackages,
                 onScanClick = viewModel::scanForUpdates,
-                onPlayStoreUpdate = { app, update -> viewModel.installFromPlay(app, update.newVersionCode) }
+                onPlayStoreUpdate = { app, versionCode -> viewModel.installFromPlay(app, versionCode) }
             )
             AppTab.Settings -> SettingsContent(
                 modifier = Modifier.fillMaxSize().padding(innerPadding),
@@ -228,9 +227,8 @@ private fun HomeContent(
     updateMap: Map<String, AppUpdateInfo>,
     listState: LazyListState,
     installs: Map<String, InstallState>,
-    playPackages: Set<String>?,
     onScanClick: () -> Unit,
-    onPlayStoreUpdate: (InstalledApp, AppUpdateInfo) -> Unit
+    onPlayStoreUpdate: (InstalledApp, Long) -> Unit
 ) {
     val fileInstalls = remember(installs, apps) {
         installs.filterKeys { key -> apps.none { it.packageName == key } }.values.toList()
@@ -309,8 +307,7 @@ private fun HomeContent(
                         app = app,
                         update = update,
                         installState = installs[app.packageName],
-                        playStoreAvailable = playPackages?.contains(app.packageName) != false,
-                        onPlayStoreUpdate = { onPlayStoreUpdate(app, update) }
+                        onPlayStoreUpdate = { versionCode -> onPlayStoreUpdate(app, versionCode) }
                     )
                 }
             }
@@ -334,8 +331,7 @@ private fun AppListItem(
     app: InstalledApp,
     update: AppUpdateInfo,
     installState: InstallState?,
-    playStoreAvailable: Boolean,
-    onPlayStoreUpdate: () -> Unit
+    onPlayStoreUpdate: (Long) -> Unit
 ) {
     val context = LocalContext.current
     val iconSizePx = with(LocalDensity.current) { APP_ICON_SIZE.roundToPx() }
@@ -394,8 +390,8 @@ private fun AppListItem(
                 horizontalArrangement = Arrangement.End,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                if (playStoreAvailable) {
-                    FilledTonalButton(onClick = onPlayStoreUpdate) {
+                if (update.playVersionCode != null) {
+                    FilledTonalButton(onClick = { onPlayStoreUpdate(update.playVersionCode) }) {
                         Box(contentAlignment = Alignment.Center) {
                             Text(
                                 text = stringResource(R.string.play_store),
@@ -415,10 +411,12 @@ private fun AppListItem(
                             }
                         }
                     }
-                    Spacer(Modifier.width(8.dp))
+                    if (update.apkMirrorUrl != null) Spacer(Modifier.width(8.dp))
                 }
-                FilledTonalButton(onClick = { openUrlInBrowser(context, update.apkMirrorUrl) }) {
-                    Text(stringResource(R.string.apkmirror))
+                if (update.apkMirrorUrl != null) {
+                    FilledTonalButton(onClick = { openUrlInBrowser(context, update.apkMirrorUrl) }) {
+                        Text(stringResource(R.string.apkmirror))
+                    }
                 }
             }
         }

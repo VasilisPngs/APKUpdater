@@ -9,16 +9,13 @@ import com.android.apkupdater.data.installer.GooglePlayInstaller
 import com.android.apkupdater.data.model.AppUpdateInfo
 import com.android.apkupdater.data.model.InstallState
 import com.android.apkupdater.data.model.InstalledApp
-import com.android.apkupdater.data.play.PlayApp
 import com.android.apkupdater.data.play.PlayAuthProvider
 import com.android.apkupdater.data.play.PlayCatalog
 import com.android.apkupdater.data.preferences.AppPreferences
 import com.android.apkupdater.data.repository.AppUpdateRepository
 import com.android.apkupdater.data.repository.ScanStatus
-import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -28,7 +25,6 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import kotlinx.coroutines.withTimeoutOrNull
 import java.util.concurrent.ConcurrentHashMap
 
 sealed interface InstallEvent {
@@ -40,16 +36,17 @@ data class UpdaterUiState(
     val scanStatus: ScanStatus = ScanStatus.Scanning,
     val installedApps: List<InstalledApp> = emptyList(),
     val updates: List<AppUpdateInfo> = emptyList(),
-    val playPackages: Set<String>? = null,
     val includeDisabledApps: Boolean = false,
     val installs: Map<String, InstallState> = emptyMap()
 )
 
 class ApkUpdaterViewModel(application: Application) : AndroidViewModel(application) {
-    private val repository = AppUpdateRepository(application.applicationContext)
     private val preferences = AppPreferences(application.applicationContext)
     private val authProvider = PlayAuthProvider(application.applicationContext)
-    private val playCatalog = PlayCatalog(authProvider)
+    private val repository = AppUpdateRepository(
+        application.applicationContext,
+        PlayCatalog(authProvider)
+    )
     private val googlePlayInstaller = GooglePlayInstaller(application.applicationContext, authProvider)
     private val bundleInstaller = BundleInstaller(application.applicationContext)
     private val _uiState = MutableStateFlow(
@@ -79,55 +76,17 @@ class ApkUpdaterViewModel(application: Application) : AndroidViewModel(applicati
                 }
             }
             val appsToCheck = allApps.filter { state.includeDisabledApps || it.isEnabled }
-            val session = async(Dispatchers.IO) { runCatching { playCatalog.warmUp() } }
 
             repository.scanForUpdates(appsToCheck).collect { status ->
-                when (status) {
-                    ScanStatus.Scanning -> _uiState.update {
-                        it.copy(scanStatus = status, updates = emptyList())
-                    }
-                    is ScanStatus.Success -> publish(status, status.updates, session)
-                    is ScanStatus.Error -> publish(status, status.partialUpdates, session)
+                val updates = when (status) {
+                    ScanStatus.Scanning -> emptyList()
+                    is ScanStatus.Success -> status.updates
+                    is ScanStatus.Error -> status.partialUpdates
                 }
+                _uiState.update { it.copy(scanStatus = status, updates = updates) }
             }
         }
     }
-
-    private suspend fun publish(
-        status: ScanStatus,
-        updates: List<AppUpdateInfo>,
-        session: Deferred<Result<Unit>>
-    ) {
-        val playApps = playDetails(updates, session)
-        val resolved = playApps?.let { apps -> updates.map { it.withPlayVersionName(apps[it.packageName]) } }
-        _uiState.update {
-            it.copy(
-                scanStatus = status,
-                updates = resolved ?: updates,
-                playPackages = playApps?.keys
-            )
-        }
-    }
-
-    private suspend fun playDetails(
-        updates: List<AppUpdateInfo>,
-        session: Deferred<Result<Unit>>
-    ): Map<String, PlayApp>? {
-        if (updates.isEmpty()) return null
-        if (session.await().isFailure) return null
-
-        val lookup = viewModelScope.async(Dispatchers.IO) {
-            runCatching { playCatalog.details(updates.map(AppUpdateInfo::packageName)) }.getOrNull()
-        }
-        return withTimeoutOrNull(PLAY_LOOKUP_TIMEOUT) { lookup.await() }
-    }
-
-    private fun AppUpdateInfo.withPlayVersionName(playApp: PlayApp?): AppUpdateInfo =
-        if (playApp != null && playApp.versionCode == newVersionCode && playApp.versionName.isNotBlank()) {
-            copy(newVersionName = playApp.versionName)
-        } else {
-            this
-        }
 
     fun installFromPlay(app: InstalledApp, versionCode: Long) =
         install(app.packageName, app.packageName) { onState ->
@@ -204,9 +163,5 @@ class ApkUpdaterViewModel(application: Application) : AndroidViewModel(applicati
         scanJob?.cancel()
         installJobs.values.forEach(Job::cancel)
         super.onCleared()
-    }
-
-    private companion object {
-        const val PLAY_LOOKUP_TIMEOUT = 10_000L
     }
 }

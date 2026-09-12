@@ -11,6 +11,8 @@ import com.android.apkupdater.data.model.ApkMirrorApk
 import com.android.apkupdater.data.model.ApkMirrorApp
 import com.android.apkupdater.data.model.AppUpdateInfo
 import com.android.apkupdater.data.model.InstalledApp
+import com.android.apkupdater.data.play.PlayApp
+import com.android.apkupdater.data.play.PlayCatalog
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
@@ -36,6 +38,7 @@ sealed interface ScanStatus {
 
 class AppUpdateRepository(
     context: Context,
+    private val playCatalog: PlayCatalog,
     private val client: ApkMirrorClient = ApkMirrorClient()
 ) {
     private val packageManager = context.packageManager
@@ -66,8 +69,12 @@ class AppUpdateRepository(
 
         emit(ScanStatus.Scanning)
 
-        val results = coroutineScope {
-            batches.map { batch ->
+        val play: Map<String, PlayApp>?
+        val results: List<Result<List<AppUpdateInfo>>>
+
+        coroutineScope {
+            val playDetails = async { playUpdates(appsToCheck) }
+            results = batches.map { batch ->
                 async {
                     try {
                         val apps = client.appExists(batch.map(InstalledApp::packageName))
@@ -79,23 +86,66 @@ class AppUpdateRepository(
                     }
                 }
             }.awaitAll()
+            play = playDetails.await()
         }
 
-        val updates = results.mapNotNull(Result<List<AppUpdateInfo>>::getOrNull)
-            .flatten()
-            .sortedWith(NEWEST_FIRST)
+        val updates = merge(
+            results.mapNotNull(Result<List<AppUpdateInfo>>::getOrNull).flatten(),
+            play.orEmpty()
+        )
         val failedBatches = results.count(Result<List<AppUpdateInfo>>::isFailure)
+        val failures = buildList {
+            when {
+                failedBatches == batches.size -> add("APKMirror could not be reached.")
+                failedBatches > 0 -> add("Some applications could not be checked on APKMirror.")
+            }
+            if (play == null) add("Google Play could not be reached.")
+        }
 
-        when {
-            failedBatches == batches.size -> {
-                emit(ScanStatus.Error("Unable to reach APKMirror.", updates))
-            }
-            failedBatches > 0 -> {
-                emit(ScanStatus.Error("Some applications could not be checked.", updates))
-            }
-            else -> emit(ScanStatus.Success(updates))
+        if (failures.isEmpty()) {
+            emit(ScanStatus.Success(updates))
+        } else {
+            emit(ScanStatus.Error(failures.joinToString(" "), updates))
         }
     }.flowOn(Dispatchers.IO)
+
+    private fun playUpdates(apps: List<InstalledApp>): Map<String, PlayApp>? {
+        val details = runCatching { playCatalog.details(apps.map(InstalledApp::packageName)) }
+            .getOrNull()
+            ?: return null
+        val installedVersions = apps.associate { it.packageName to it.versionCode }
+
+        return details.filter { (packageName, playApp) ->
+            playApp.versionCode > (installedVersions[packageName] ?: Long.MAX_VALUE)
+        }
+    }
+
+    private fun merge(
+        apkMirrorUpdates: List<AppUpdateInfo>,
+        playUpdates: Map<String, PlayApp>
+    ): List<AppUpdateInfo> {
+        val byPackage = LinkedHashMap<String, AppUpdateInfo>()
+        apkMirrorUpdates.forEach { byPackage[it.packageName] = it }
+
+        playUpdates.forEach { (packageName, playApp) ->
+            val update = byPackage[packageName]
+            byPackage[packageName] = update?.copy(
+                newVersionName = playApp.versionName.ifBlank { update.newVersionName },
+                newVersionCode = playApp.versionCode,
+                playVersionCode = playApp.versionCode
+            ) ?: AppUpdateInfo(
+                packageName = packageName,
+                appName = label(packageName),
+                newVersionName = playApp.versionName,
+                newVersionCode = playApp.versionCode,
+                publishedAt = null,
+                playVersionCode = playApp.versionCode,
+                apkMirrorUrl = null
+            )
+        }
+
+        return byPackage.values.sortedWith(NEWEST_FIRST)
+    }
 
     private fun parseUpdates(
         apps: List<ApkMirrorApp>,
@@ -115,6 +165,7 @@ class AppUpdateRepository(
                 newVersionName = app.versionName,
                 newVersionCode = apk.versionCode,
                 publishedAt = publishedAt(apk.publishDate.ifBlank { app.publishDate }),
+                playVersionCode = null,
                 apkMirrorUrl = apk.link.toAbsoluteApkMirrorUrl()
             )
         }

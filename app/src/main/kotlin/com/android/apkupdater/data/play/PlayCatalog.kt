@@ -6,10 +6,6 @@ data class PlayApp(val versionCode: Long, val versionName: String)
 
 class PlayCatalog(private val authProvider: PlayAuthProvider) {
 
-    fun warmUp() {
-        authProvider.session()
-    }
-
     fun details(packageNames: List<String>): Map<String, PlayApp> {
         if (packageNames.isEmpty()) return emptyMap()
 
