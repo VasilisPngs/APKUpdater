@@ -15,7 +15,7 @@ import java.util.concurrent.TimeUnit
 interface ApkMirrorService {
 
     @Headers(
-        "User-Agent: APKUpdater/1.0.0",
+        "User-Agent: GUpdater/1.0.0",
         "Authorization: Basic YXBpLWFwa3VwZGF0ZXI6cm01cmNmcnVVakt5MDRzTXB5TVBKWFc4"
     )
     @POST("wp-json/apkm/v1/app_exists/")

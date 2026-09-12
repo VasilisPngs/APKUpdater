@@ -23,8 +23,6 @@ data class UpdaterUiState(
     val scanStatus: ScanStatus = ScanStatus.Idle,
     val installedApps: List<InstalledApp> = emptyList(),
     val updates: List<AppUpdateInfo> = emptyList(),
-    val searchQuery: String = "",
-    val includeSystemApps: Boolean = false,
     val includeDisabledApps: Boolean = false,
     val installState: InstallState = InstallState.Idle
 )
@@ -34,10 +32,7 @@ class ApkUpdaterViewModel(application: Application) : AndroidViewModel(applicati
     private val preferences = AppPreferences(application.applicationContext)
     private val installer = GooglePlayInstaller(application.applicationContext)
     private val _uiState = MutableStateFlow(
-        UpdaterUiState(
-            includeSystemApps = preferences.includeSystemApps,
-            includeDisabledApps = preferences.includeDisabledApps
-        )
+        UpdaterUiState(includeDisabledApps = preferences.includeDisabledApps)
     )
     private var scanJob: Job? = null
     private var installJob: Job? = null
@@ -65,9 +60,7 @@ class ApkUpdaterViewModel(application: Application) : AndroidViewModel(applicati
                     _uiState.update { it.copy(installedApps = apps) }
                 }
             }
-            val appsToCheck = allApps
-                .filter { state.includeSystemApps || !it.isSystemApp }
-                .filter { state.includeDisabledApps || it.isEnabled }
+            val appsToCheck = allApps.filter { state.includeDisabledApps || it.isEnabled }
 
             repository.scanForUpdates(appsToCheck).collect { status ->
                 _uiState.update { current ->
@@ -104,17 +97,6 @@ class ApkUpdaterViewModel(application: Application) : AndroidViewModel(applicati
             }
             installJob = null
         }
-    }
-
-    fun setSearchQuery(query: String) {
-        _uiState.update { it.copy(searchQuery = query) }
-    }
-
-    fun setIncludeSystemApps(include: Boolean) {
-        if (_uiState.value.includeSystemApps == include) return
-        preferences.includeSystemApps = include
-        _uiState.update { it.copy(includeSystemApps = include) }
-        scanForUpdates()
     }
 
     fun setIncludeDisabledApps(include: Boolean) {

@@ -7,7 +7,7 @@ import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
 import com.android.apkupdater.ui.ApkUpdaterScreen
 import com.android.apkupdater.ui.ApkUpdaterViewModel
-import com.android.apkupdater.ui.theme.ApkUpdaterTheme
+import com.android.apkupdater.ui.theme.GUpdaterTheme
 
 class MainActivity : ComponentActivity() {
     private val viewModel: ApkUpdaterViewModel by viewModels()
@@ -16,7 +16,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         setContent {
-            ApkUpdaterTheme {
+            GUpdaterTheme {
                 ApkUpdaterScreen(viewModel = viewModel)
             }
         }

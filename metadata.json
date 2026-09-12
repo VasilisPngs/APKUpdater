@@ -1,6 +1,6 @@
 {
-  "name": "APKUpdater",
-  "description": "Scan installed device apps and check for updates via APKMirror",
+  "name": "GUpdater",
+  "description": "Check installed Google apps for updates from APKMirror Google LLC uploads",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

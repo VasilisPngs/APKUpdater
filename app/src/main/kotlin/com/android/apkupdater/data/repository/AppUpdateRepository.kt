@@ -126,7 +126,7 @@ class AppUpdateRepository(
                     ?: return@mapNotNull null
 
                 val url = bestApk.link.toAbsoluteApkMirrorUrl()
-                if (url.isBlank()) return@mapNotNull null
+                if (!url.startsWith(GOOGLE_APKMIRROR_PREFIX)) return@mapNotNull null
 
                 AppUpdateInfo(
                     packageName = installed.packageName,
@@ -197,6 +197,7 @@ class AppUpdateRepository(
 
     private companion object {
         const val API_BATCH_SIZE = 100
+        const val GOOGLE_APKMIRROR_PREFIX = "https://www.apkmirror.com/apk/google-inc/"
         val STABLE_RELEASE_EXCLUSIONS = listOf("alpha", "beta")
     }
 }
