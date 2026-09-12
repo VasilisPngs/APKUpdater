@@ -29,5 +29,27 @@
 - Keep expensive work away from the UI thread.
 - Prefer current Android APIs and remove obsolete compatibility layers and workarounds.
 
+## Blur, transparency and system surfaces
+- Build blur and transparency with the official platform and Jetpack APIs only; never with a third party effect library or a hand drawn imitation.
+- Blur inside the application, such as content that scrolls under a bar, is rendered with `BlurEffect` on a `GraphicsLayer`, backed by the platform `RenderEffect`, which requires Android 12.
+- Blur of what lies behind the application window, such as a dialog dimming the screen, uses the cross window blur APIs `Window.setBackgroundBlurRadius`, `WindowManager.LayoutParams.FLAG_BLUR_BEHIND` and `setBlurBehindRadius`, and must query `WindowManager.isCrossWindowBlurEnabled` and register the listener, because the system disables these blurs on battery saver, on low graphics performance and by developer override.
+- Translucent surfaces stay readable when blurs are unavailable: pair them with the Material container colors instead of relying on the effect alone.
+- Draw edge to edge and let the window insets place the content, rather than reserving space manually.
+
+### Official references
+- Graphics modifiers: https://developer.android.com/develop/ui/compose/graphics/draw/modifiers
+- Graphics in Compose: https://developer.android.com/develop/ui/compose/graphics/draw/overview
+- BlurEffect: https://developer.android.com/reference/kotlin/androidx/compose/ui/graphics/BlurEffect
+- GraphicsLayer: https://developer.android.com/reference/kotlin/androidx/compose/ui/graphics/layer/GraphicsLayer
+- RenderEffect: https://developer.android.com/reference/android/graphics/RenderEffect
+- Window: https://developer.android.com/reference/android/view/Window
+- WindowManager: https://developer.android.com/reference/android/view/WindowManager
+- Window blurs: https://source.android.com/docs/core/display/window-blurs
+- Window insets: https://developer.android.com/develop/ui/compose/system/insets
+- Edge to edge: https://developer.android.com/develop/ui/views/layout/edge-to-edge
+- App bars: https://developer.android.com/develop/ui/compose/components/app-bars
+- Material Design 3 in Compose: https://developer.android.com/develop/ui/compose/designsystems/material3
+- Dynamic color: https://developer.android.com/develop/ui/views/theming/dynamic-colors
+
 ## Verification
 - Before considering a change complete, verify build/lint results, dependencies, resources, release configuration and relevant runtime behavior.
