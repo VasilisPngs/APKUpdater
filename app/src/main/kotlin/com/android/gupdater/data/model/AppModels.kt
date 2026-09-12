@@ -2,7 +2,6 @@ package com.android.gupdater.data.model
 
 data class InstalledApp(
     val packageName: String,
-    val appName: String,
     val versionName: String,
     val versionCode: Long,
     val signatureSha1s: Set<String>,

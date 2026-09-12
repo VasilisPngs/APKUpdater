@@ -12,6 +12,9 @@ import com.android.gupdater.data.model.AppUpdateInfo
 import com.android.gupdater.data.model.InstalledApp
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
@@ -44,15 +47,13 @@ class AppUpdateRepository(
 
                 InstalledApp(
                     packageName = packageInfo.packageName,
-                    appName = appInfo.loadLabel(packageManager).toString().trim()
-                        .ifEmpty { packageInfo.packageName },
                     versionName = packageInfo.versionName ?: "Unknown",
                     versionCode = packageInfo.longVersionCode,
                     signatureSha1s = packageInfo.signingInfo.sha1Signatures(),
                     isEnabled = appInfo.enabled
                 )
             }.getOrNull()
-        }.sortedBy { it.appName.lowercase() }
+        }
     }
 
     fun scanForUpdates(appsToCheck: List<InstalledApp>): Flow<ScanStatus> = flow {
@@ -62,26 +63,31 @@ class AppUpdateRepository(
         }
 
         val batches = appsToCheck.chunked(API_BATCH_SIZE)
-        val updates = mutableListOf<AppUpdateInfo>()
-        var failedBatches = 0
 
         emit(ScanStatus.Scanning)
 
-        for (batch in batches) {
-            try {
-                val response = service.appExists(
-                    AppExistsRequest(
-                        pnames = batch.map(InstalledApp::packageName),
-                        exclude = STABLE_RELEASE_EXCLUSIONS
-                    )
-                )
-                updates += parseUpdates(response.data, batch)
-            } catch (exception: CancellationException) {
-                throw exception
-            } catch (_: Exception) {
-                failedBatches++
-            }
+        val results = coroutineScope {
+            batches.map { batch ->
+                async {
+                    try {
+                        val response = service.appExists(
+                            AppExistsRequest(
+                                pnames = batch.map(InstalledApp::packageName),
+                                exclude = STABLE_RELEASE_EXCLUSIONS
+                            )
+                        )
+                        Result.success(parseUpdates(response.data, batch))
+                    } catch (exception: CancellationException) {
+                        throw exception
+                    } catch (exception: Exception) {
+                        Result.failure(exception)
+                    }
+                }
+            }.awaitAll()
         }
+
+        val updates = results.mapNotNull(Result<List<AppUpdateInfo>>::getOrNull).flatten()
+        val failedBatches = results.count(Result<List<AppUpdateInfo>>::isFailure)
 
         when {
             failedBatches == batches.size -> {
@@ -122,7 +128,7 @@ class AppUpdateRepository(
 
                 AppUpdateInfo(
                     packageName = installed.packageName,
-                    appName = installed.appName,
+                    appName = label(installed.packageName),
                     currentVersionName = installed.versionName,
                     currentVersionCode = installed.versionCode,
                     newVersionName = release.version.orEmpty(),
@@ -132,6 +138,13 @@ class AppUpdateRepository(
             }
             .toList()
     }
+
+    private fun label(packageName: String): String = runCatching {
+        packageManager.getApplicationInfo(packageName, PackageManager.ApplicationInfoFlags.of(0))
+            .loadLabel(packageManager)
+            .toString()
+            .trim()
+    }.getOrNull()?.ifEmpty { null } ?: packageName
 
     private fun filterSignature(apk: AppExistsApk, installedSignatures: Set<String>): Boolean {
         val signatures = apk.signaturesSha1.orEmpty()

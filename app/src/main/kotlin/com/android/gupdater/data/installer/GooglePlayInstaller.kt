@@ -29,33 +29,33 @@ class GooglePlayInstaller(private val context: Context) {
         versionCode: Long,
         onState: (InstallState) -> Unit
     ): Result<Unit> = withContext(Dispatchers.IO) {
+        val appName = label(app.packageName)
         val directory = File(context.cacheDir, "play_${app.packageName}_$versionCode")
         try {
             require(versionCode > app.versionCode) {
                 "The requested version must be newer than the installed version."
             }
 
-            onState(InstallState.Preparing(app.appName))
+            onState(InstallState.Preparing(appName))
             directory.deleteRecursively()
             directory.mkdirs()
 
             val session = openSession(app.packageName)
             val files = purchase(session, app, versionCode)
 
-            val apkFiles = download(app.appName, files, directory, onState)
-            installDependencies(session, app.appName, directory, onState)
+            val apkFiles = download(appName, files, directory, onState)
+            installDependencies(session, appName, directory, onState)
 
-            onState(InstallState.Installing(app.appName))
+            onState(InstallState.Installing(appName))
             packageInstaller.install(apkFiles.map(ApkSource::of)).getOrThrow()
-            onState(InstallState.Success(app.appName))
+            directory.deleteRecursively()
+            onState(InstallState.Success(appName))
             Result.success(Unit)
         } catch (exception: CancellationException) {
             throw exception
         } catch (exception: Exception) {
-            onState(InstallState.Error(app.appName, exception.message ?: "Installation failed"))
+            onState(InstallState.Error(appName, exception.message ?: "Installation failed"))
             Result.failure(exception)
-        } finally {
-            directory.deleteRecursively()
         }
     }
 
@@ -165,6 +165,13 @@ class GooglePlayInstaller(private val context: Context) {
         }.getOrNull() ?: return false
         return installedVersion >= library.versionCode
     }
+
+    private fun label(packageName: String): String = runCatching {
+        context.packageManager.getApplicationInfo(
+            packageName,
+            PackageManager.ApplicationInfoFlags.of(0)
+        ).loadLabel(context.packageManager).toString().trim()
+    }.getOrNull()?.ifEmpty { null } ?: packageName
 
     private fun certificateHash(packageName: String): String? = runCatching {
         val signingInfo = context.packageManager.getPackageInfo(

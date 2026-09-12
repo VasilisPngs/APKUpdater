@@ -29,6 +29,7 @@ class BundleInstaller(private val context: Context) {
                 ZipFile(archive).use { zip ->
                     packageInstaller.install(sources(zip, archive)).getOrThrow()
                 }
+                archive.delete()
                 onState(InstallState.Success(label))
                 Result.success(Unit)
             } catch (exception: CancellationException) {
@@ -40,8 +41,6 @@ class BundleInstaller(private val context: Context) {
             } catch (exception: Exception) {
                 onState(InstallState.Error(label, exception.message ?: "Installation failed"))
                 Result.failure(exception)
-            } finally {
-                archive.delete()
             }
         }
 

@@ -66,6 +66,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -78,6 +79,8 @@ import com.android.gupdater.data.repository.ScanStatus
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+
+private val APP_ICON_SIZE = 56.dp
 
 private enum class AppTab(val labelRes: Int) {
     Home(R.string.home),
@@ -117,7 +120,9 @@ fun GUpdaterScreen(
         uiState.updates.associateBy(AppUpdateInfo::packageName)
     }
     val appsWithUpdates = remember(uiState.installedApps, updateMap) {
-        uiState.installedApps.filter { updateMap.containsKey(it.packageName) }
+        uiState.installedApps
+            .filter { updateMap.containsKey(it.packageName) }
+            .sortedBy { updateMap.getValue(it.packageName).appName.lowercase() }
     }
 
     Scaffold(
@@ -306,10 +311,11 @@ private fun AppListItem(
     onPlayStoreUpdate: () -> Unit
 ) {
     val context = LocalContext.current
+    val iconSizePx = with(LocalDensity.current) { APP_ICON_SIZE.roundToPx() }
     val iconBitmap by produceState<Bitmap?>(initialValue = null, key1 = app.packageName) {
         value = withContext(Dispatchers.IO) {
             runCatching {
-                context.packageManager.getApplicationIcon(app.packageName).toBitmap()
+                context.packageManager.getApplicationIcon(app.packageName).toBitmap(iconSizePx)
             }.getOrNull()
         }
     }
@@ -320,17 +326,17 @@ private fun AppListItem(
                 if (iconBitmap != null) {
                     Image(
                         bitmap = iconBitmap!!.asImageBitmap(),
-                        contentDescription = app.appName,
-                        modifier = Modifier.size(56.dp),
+                        contentDescription = update.appName,
+                        modifier = Modifier.size(APP_ICON_SIZE),
                         contentScale = ContentScale.Fit
                     )
                 } else {
-                    Box(Modifier.size(56.dp))
+                    Box(Modifier.size(APP_ICON_SIZE))
                 }
                 Spacer(Modifier.width(16.dp))
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = app.appName,
+                        text = update.appName,
                         maxLines = 3,
                         overflow = TextOverflow.Ellipsis,
                         style = MaterialTheme.typography.titleMedium
@@ -390,16 +396,13 @@ private fun AppListItem(
     }
 }
 
-private fun android.graphics.drawable.Drawable.toBitmap(): Bitmap {
-    val width = intrinsicWidth.takeIf { it > 0 } ?: 1
-    val height = intrinsicHeight.takeIf { it > 0 } ?: 1
-    return Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888).also { bitmap ->
+private fun android.graphics.drawable.Drawable.toBitmap(sizePx: Int): Bitmap =
+    Bitmap.createBitmap(sizePx, sizePx, Bitmap.Config.ARGB_8888).also { bitmap ->
         Canvas(bitmap).also { canvas ->
-            setBounds(0, 0, canvas.width, canvas.height)
+            setBounds(0, 0, sizePx, sizePx)
             draw(canvas)
         }
     }
-}
 
 @Composable
 private fun SettingsContent(
