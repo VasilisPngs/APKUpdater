@@ -5,6 +5,8 @@ import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -26,11 +28,15 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Home
+import androidx.compose.material.icons.rounded.MoreVert
 import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material3.CenterAlignedTopAppBar
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
@@ -86,6 +92,7 @@ fun GUpdaterScreen(
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     var selectedTabIndex by remember { mutableIntStateOf(AppTab.Home.ordinal) }
     var manualUpdateApp by remember { mutableStateOf<InstalledApp?>(null) }
+    var menuExpanded by remember { mutableStateOf(false) }
     val homeListState = rememberLazyListState()
     val coroutineScope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
@@ -93,6 +100,9 @@ fun GUpdaterScreen(
     val installActive = uiState.installState is InstallState.Preparing ||
         uiState.installState is InstallState.Downloading ||
         uiState.installState is InstallState.Installing
+    val bundlePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        uri?.let(viewModel::installBundle)
+    }
 
     LaunchedEffect(uiState.installState) {
         when (val state = uiState.installState) {
@@ -116,10 +126,11 @@ fun GUpdaterScreen(
     manualUpdateApp?.let { app ->
         ManualUpdateDialog(
             app = app,
+            suggestedVersionCode = updateMap[app.packageName]?.newVersionCode ?: 0L,
             onDismiss = { manualUpdateApp = null },
-            onConfirm = { versionCode, email, aasToken ->
+            onConfirm = { versionCode ->
                 manualUpdateApp = null
-                viewModel.installManual(app, versionCode, email, aasToken)
+                viewModel.installManual(app, versionCode)
             }
         )
     }
@@ -128,7 +139,29 @@ fun GUpdaterScreen(
         modifier = modifier.fillMaxSize(),
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
-            CenterAlignedTopAppBar(title = { Text(stringResource(R.string.app_name)) })
+            CenterAlignedTopAppBar(
+                title = { Text(stringResource(R.string.app_name)) },
+                actions = {
+                    IconButton(onClick = { menuExpanded = true }, enabled = !installActive) {
+                        Icon(
+                            imageVector = Icons.Rounded.MoreVert,
+                            contentDescription = stringResource(R.string.more_options)
+                        )
+                    }
+                    DropdownMenu(
+                        expanded = menuExpanded,
+                        onDismissRequest = { menuExpanded = false }
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.install_bundle)) },
+                            onClick = {
+                                menuExpanded = false
+                                bundlePicker.launch(arrayOf("*/*"))
+                            }
+                        )
+                    }
+                }
+            )
         },
         bottomBar = {
             NavigationBar {
@@ -165,9 +198,8 @@ fun GUpdaterScreen(
                 apps = appsWithUpdates,
                 updateMap = updateMap,
                 listState = homeListState,
-                installActive = installActive,
+                installState = uiState.installState,
                 onScanClick = viewModel::scanForUpdates,
-                onInstallUpdate = viewModel::installUpdate,
                 onManualUpdate = { manualUpdateApp = it }
             )
             AppTab.Settings -> SettingsContent(
@@ -186,12 +218,16 @@ private fun HomeContent(
     apps: List<InstalledApp>,
     updateMap: Map<String, AppUpdateInfo>,
     listState: LazyListState,
-    installActive: Boolean,
+    installState: InstallState,
     onScanClick: () -> Unit,
-    onInstallUpdate: (AppUpdateInfo) -> Unit,
     onManualUpdate: (InstalledApp) -> Unit
 ) {
+    val installActive = installState is InstallState.Preparing ||
+        installState is InstallState.Downloading ||
+        installState is InstallState.Installing
+
     Column(modifier = modifier) {
+        InstallProgressSection(installState)
         ScanStatusSection(status, apps.size, onScanClick)
         if (apps.isEmpty()) {
             EmptyAppsView(
@@ -213,13 +249,26 @@ private fun HomeContent(
                             app = app,
                             update = update,
                             installActive = installActive,
-                            onInstallUpdate = { onInstallUpdate(update) },
                             onManualUpdate = { onManualUpdate(app) }
                         )
                     }
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun InstallProgressSection(installState: InstallState) {
+    when (installState) {
+        is InstallState.Downloading -> LinearProgressIndicator(
+            progress = { installState.progress },
+            modifier = Modifier.fillMaxWidth()
+        )
+        is InstallState.Preparing, is InstallState.Installing -> LinearProgressIndicator(
+            modifier = Modifier.fillMaxWidth()
+        )
+        else -> Unit
     }
 }
 
@@ -271,7 +320,6 @@ private fun AppListItem(
     app: InstalledApp,
     update: AppUpdateInfo,
     installActive: Boolean,
-    onInstallUpdate: () -> Unit,
     onManualUpdate: () -> Unit
 ) {
     val context = LocalContext.current

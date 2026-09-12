@@ -9,6 +9,9 @@
 - GUpdater checks installed applications for Google LLC updates available from the APKMirror Google Inc. publisher feed.
 - System and user applications are included by default.
 - Disabled applications are excluded by default and may be included from Settings.
+- Update discovery stays on the APKMirror Google Inc. publisher feed; the Update action opens the APKMirror release page.
+- The manual action downloads a requested version code from Google Play through GPlayAPI, always over an anonymous session obtained from the Aurora dispenser, never a personal Google account.
+- The app installs APK bundles (`.apkm`, `.xapk`, `.apks`) and single APKs opened from the system or picked in the app, selecting only the splits that match the device.
 - Do not restore general-purpose application update discovery or non-Google update sources.
 
 ## Releases

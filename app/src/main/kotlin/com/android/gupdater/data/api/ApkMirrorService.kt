@@ -4,13 +4,11 @@ import com.android.gupdater.data.model.AppExistsRequest
 import com.android.gupdater.data.model.AppExistsResponse
 import com.squareup.moshi.Moshi
 import com.squareup.moshi.kotlin.reflect.KotlinJsonAdapterFactory
-import okhttp3.OkHttpClient
 import retrofit2.Retrofit
 import retrofit2.converter.moshi.MoshiConverterFactory
 import retrofit2.http.Body
 import retrofit2.http.Headers
 import retrofit2.http.POST
-import java.util.concurrent.TimeUnit
 
 interface ApkMirrorService {
 
@@ -25,19 +23,13 @@ interface ApkMirrorService {
         private const val BASE_URL = "https://www.apkmirror.com/"
 
         fun create(): ApkMirrorService {
-            val client = OkHttpClient.Builder()
-                .connectTimeout(30, TimeUnit.SECONDS)
-                .readTimeout(30, TimeUnit.SECONDS)
-                .writeTimeout(30, TimeUnit.SECONDS)
-                .build()
-
             val moshi = Moshi.Builder()
                 .addLast(KotlinJsonAdapterFactory())
                 .build()
 
             return Retrofit.Builder()
                 .baseUrl(BASE_URL)
-                .client(client)
+                .client(SharedHttpClient.instance)
                 .addConverterFactory(MoshiConverterFactory.create(moshi))
                 .build()
                 .create(ApkMirrorService::class.java)

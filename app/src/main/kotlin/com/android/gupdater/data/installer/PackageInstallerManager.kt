@@ -7,17 +7,15 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.PackageInstaller
 import kotlinx.coroutines.CompletableDeferred
-import java.io.File
 
 class PackageInstallerManager(private val context: Context) {
 
-    suspend fun install(apkFiles: List<File>): Result<Unit> {
-        if (apkFiles.isEmpty()) return Result.failure(IllegalArgumentException("No APK files to install."))
+    suspend fun install(sources: List<ApkSource>): Result<Unit> {
+        if (sources.isEmpty()) return Result.failure(IllegalArgumentException("No APK files to install."))
 
-        val installer = context.getPackageManager().getPackageInstaller()
-        val totalSize = apkFiles.sumOf { it.length() }
+        val installer = context.packageManager.packageInstaller
         val params = PackageInstaller.SessionParams(PackageInstaller.SessionParams.MODE_FULL_INSTALL).apply {
-            setSize(totalSize)
+            setSize(sources.sumOf { it.size.coerceAtLeast(0) })
         }
         val sessionId = try {
             installer.createSession(params)
@@ -55,16 +53,14 @@ class PackageInstallerManager(private val context: Context) {
 
         context.registerReceiver(receiver, IntentFilter(action), Context.RECEIVER_NOT_EXPORTED)
         return try {
-            apkFiles
-                .sortedWith(compareByDescending<File> { it.name.equals("base.apk", ignoreCase = true) }.thenBy { it.name })
-                .forEach { file ->
-                    file.inputStream().use { input ->
-                        session.openWrite(file.name, 0, file.length()).use { output ->
-                            input.copyTo(output)
-                            session.fsync(output)
-                        }
+            sources.forEach { source ->
+                source.openStream().use { input ->
+                    session.openWrite(source.name, 0, source.size).use { output ->
+                        input.copyTo(output, COPY_BUFFER_SIZE)
+                        session.fsync(output)
                     }
                 }
+            }
 
             val pendingIntent = PendingIntent.getBroadcast(
                 context,
@@ -81,5 +77,9 @@ class PackageInstallerManager(private val context: Context) {
         } finally {
             runCatching { context.unregisterReceiver(receiver) }
         }
+    }
+
+    private companion object {
+        const val COPY_BUFFER_SIZE = 64 * 1024
     }
 }

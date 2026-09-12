@@ -1,5 +1,6 @@
 package com.android.gupdater
 
+import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -15,10 +16,22 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        if (savedInstanceState == null) installFromIntent(intent)
         setContent {
             GUpdaterTheme {
                 GUpdaterScreen(viewModel = viewModel)
             }
         }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        installFromIntent(intent)
+    }
+
+    private fun installFromIntent(intent: Intent) {
+        if (intent.action != Intent.ACTION_VIEW) return
+        intent.data?.let(viewModel::installBundle)
     }
 }

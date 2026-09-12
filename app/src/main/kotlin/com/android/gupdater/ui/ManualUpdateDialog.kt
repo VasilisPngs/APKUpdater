@@ -17,7 +17,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import com.android.gupdater.R
 import com.android.gupdater.data.model.InstalledApp
@@ -25,14 +24,15 @@ import com.android.gupdater.data.model.InstalledApp
 @Composable
 fun ManualUpdateDialog(
     app: InstalledApp,
+    suggestedVersionCode: Long,
     onDismiss: () -> Unit,
-    onConfirm: (versionCode: Long, email: String, aasToken: String) -> Unit
+    onConfirm: (versionCode: Long) -> Unit
 ) {
-    var versionCodeText by remember(app.packageName) { mutableStateOf("") }
-    var email by remember(app.packageName) { mutableStateOf("") }
-    var aasToken by remember(app.packageName) { mutableStateOf("") }
+    var versionCodeText by remember(app.packageName) {
+        mutableStateOf(if (suggestedVersionCode > app.versionCode) suggestedVersionCode.toString() else "")
+    }
     val versionCode = versionCodeText.toLongOrNull()
-    val isValid = versionCode != null && versionCode > app.versionCode && email.isNotBlank() && aasToken.isNotBlank()
+    val isValid = versionCode != null && versionCode > app.versionCode
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -53,39 +53,23 @@ fun ManualUpdateDialog(
                     label = { Text(stringResource(R.string.version_code)) },
                     singleLine = true,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                    isError = versionCodeText.isNotEmpty() && (versionCode == null || versionCode <= app.versionCode),
+                    isError = versionCodeText.isNotEmpty() && !isValid,
                     supportingText = {
-                        if (versionCodeText.isNotEmpty() && (versionCode == null || versionCode <= app.versionCode)) {
+                        if (versionCodeText.isNotEmpty() && !isValid) {
                             Text(stringResource(R.string.enter_newer_version_code, app.versionCode))
                         }
                     }
                 )
-                OutlinedTextField(
-                    value = email,
-                    onValueChange = { email = it },
-                    label = { Text(stringResource(R.string.google_play_email)) },
-                    singleLine = true,
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
-                    modifier = Modifier.padding(top = 12.dp)
-                )
-                OutlinedTextField(
-                    value = aasToken,
-                    onValueChange = { aasToken = it },
-                    label = { Text(stringResource(R.string.google_play_aas_token)) },
-                    singleLine = true,
-                    visualTransformation = PasswordVisualTransformation(),
-                    modifier = Modifier.padding(top = 12.dp)
-                )
                 Text(
-                    text = stringResource(R.string.google_play_aas_token_help),
+                    text = stringResource(R.string.manual_update_help),
                     style = MaterialTheme.typography.bodySmall,
-                    modifier = Modifier.padding(top = 8.dp)
+                    modifier = Modifier.padding(top = 12.dp)
                 )
             }
         },
         confirmButton = {
             FilledTonalButton(
-                onClick = { onConfirm(versionCode!!, email.trim(), aasToken.trim()) },
+                onClick = { onConfirm(versionCode!!) },
                 enabled = isValid,
                 shape = MaterialTheme.shapes.extraLarge
             ) {

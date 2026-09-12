@@ -1,13 +1,14 @@
 package com.android.gupdater.ui
 
 import android.app.Application
+import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
-import com.android.gupdater.data.installer.ApkMirrorInstaller
+import com.android.gupdater.data.installer.BundleInstaller
 import com.android.gupdater.data.installer.GooglePlayInstaller
 import com.android.gupdater.data.model.AppUpdateInfo
-import com.android.gupdater.data.model.InstalledApp
 import com.android.gupdater.data.model.InstallState
+import com.android.gupdater.data.model.InstalledApp
 import com.android.gupdater.data.preferences.AppPreferences
 import com.android.gupdater.data.repository.AppUpdateRepository
 import com.android.gupdater.data.repository.ScanStatus
@@ -31,8 +32,8 @@ data class UpdaterUiState(
 class GUpdaterViewModel(application: Application) : AndroidViewModel(application) {
     private val repository = AppUpdateRepository(application.applicationContext)
     private val preferences = AppPreferences(application.applicationContext)
-    private val apkMirrorInstaller = ApkMirrorInstaller(application.applicationContext)
     private val googlePlayInstaller = GooglePlayInstaller(application.applicationContext)
+    private val bundleInstaller = BundleInstaller(application.applicationContext)
     private val _uiState = MutableStateFlow(
         UpdaterUiState(includeDisabledApps = preferences.includeDisabledApps)
     )
@@ -83,39 +84,15 @@ class GUpdaterViewModel(application: Application) : AndroidViewModel(application
         }
     }
 
-    fun installUpdate(update: AppUpdateInfo) {
-        if (installJob?.isActive == true) return
-        scanJob?.cancel()
-        installJob = viewModelScope.launch {
-            val result = withContext(Dispatchers.IO) {
-                apkMirrorInstaller.install(update) { state ->
-                    _uiState.update { it.copy(installState = state) }
-                }
-            }
-            if (result.isSuccess) {
-                val apps = withContext(Dispatchers.IO) { repository.getInstalledApps() }
-                _uiState.update { it.copy(installedApps = apps) }
-                scanForUpdates()
-            }
-            installJob = null
+    fun installManual(app: InstalledApp, versionCode: Long) = install {
+        googlePlayInstaller.install(app, versionCode) { state ->
+            _uiState.update { it.copy(installState = state) }
         }
     }
 
-    fun installManual(app: InstalledApp, versionCode: Long, email: String, aasToken: String) {
-        if (installJob?.isActive == true) return
-        scanJob?.cancel()
-        installJob = viewModelScope.launch {
-            val result = withContext(Dispatchers.IO) {
-                googlePlayInstaller.install(app, versionCode, email, aasToken) { state ->
-                    _uiState.update { it.copy(installState = state) }
-                }
-            }
-            if (result.isSuccess) {
-                val apps = withContext(Dispatchers.IO) { repository.getInstalledApps() }
-                _uiState.update { it.copy(installedApps = apps) }
-                scanForUpdates()
-            }
-            installJob = null
+    fun installBundle(uri: Uri) = install {
+        bundleInstaller.install(uri) { state ->
+            _uiState.update { it.copy(installState = state) }
         }
     }
 
@@ -124,6 +101,20 @@ class GUpdaterViewModel(application: Application) : AndroidViewModel(application
         preferences.includeDisabledApps = include
         _uiState.update { it.copy(includeDisabledApps = include) }
         scanForUpdates()
+    }
+
+    private fun install(block: suspend () -> Result<Unit>) {
+        if (installJob?.isActive == true) return
+        scanJob?.cancel()
+        installJob = viewModelScope.launch {
+            val result = withContext(Dispatchers.IO) { block() }
+            if (result.isSuccess) {
+                val apps = withContext(Dispatchers.IO) { repository.getInstalledApps() }
+                _uiState.update { it.copy(installedApps = apps) }
+                scanForUpdates()
+            }
+            installJob = null
+        }
     }
 
     override fun onCleared() {

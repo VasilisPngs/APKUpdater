@@ -21,9 +21,9 @@
     <string name="manual_update">Manual update</string>
     <string name="version_code">Version code</string>
     <string name="enter_newer_version_code">Enter a version code newer than %1$d</string>
-    <string name="google_play_email">Google Play email</string>
-    <string name="google_play_aas_token">Google Play AAS token</string>
-    <string name="google_play_aas_token_help">Manual downloads use Google Play through GPlayAPI. Generate an AAS token with an Aurora Authenticator-compatible account.</string>
+    <string name="manual_update_help">The requested version is downloaded from Google Play over an anonymous session, without a personal Google account. Google Play only serves version codes it still distributes for this device.</string>
+    <string name="more_options">More options</string>
+    <string name="install_bundle">Install APK bundle</string>
     <string name="ok">OK</string>
     <string name="cancel">Cancel</string>
     <string name="update_installed">%1$s was updated</string>
