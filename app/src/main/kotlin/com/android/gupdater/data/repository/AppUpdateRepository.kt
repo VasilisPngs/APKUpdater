@@ -20,7 +20,7 @@ import java.security.MessageDigest
 
 sealed interface ScanStatus {
     data object Idle : ScanStatus
-    data class Scanning(val processed: Int, val total: Int, val currentBatch: String) : ScanStatus
+    data object Scanning : ScanStatus
     data class Success(val updates: List<AppUpdateInfo>) : ScanStatus
     data class Error(val message: String, val partialUpdates: List<AppUpdateInfo>) : ScanStatus
 }
@@ -63,14 +63,11 @@ class AppUpdateRepository(
 
         val batches = appsToCheck.chunked(API_BATCH_SIZE)
         val updates = mutableListOf<AppUpdateInfo>()
-        var processed = 0
         var failedBatches = 0
 
-        emit(ScanStatus.Scanning(0, appsToCheck.size, "Preparing scan…"))
+        emit(ScanStatus.Scanning)
 
         for (batch in batches) {
-            emit(ScanStatus.Scanning(processed, appsToCheck.size, batch.first().appName))
-
             try {
                 val response = service.appExists(
                     AppExistsRequest(
@@ -84,9 +81,6 @@ class AppUpdateRepository(
             } catch (_: Exception) {
                 failedBatches++
             }
-
-            processed += batch.size
-            emit(ScanStatus.Scanning(processed, appsToCheck.size, batch.last().appName))
         }
 
         when {

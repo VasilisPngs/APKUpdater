@@ -29,6 +29,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Home
 import androidx.compose.material.icons.rounded.MoreVert
+import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.CircularProgressIndicator
@@ -38,7 +39,6 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
@@ -219,31 +219,22 @@ private fun HomeContent(
     Column(modifier = modifier) {
         if (installingPackage == null) InstallProgressSection(installState)
         ScanStatusSection(status, apps.size, onScanClick)
-        if (apps.isEmpty()) {
-            EmptyAppsView(
-                when (status) {
-                    is ScanStatus.Scanning -> stringResource(R.string.checking_installed_apps)
-                    else -> stringResource(R.string.no_updates_available)
-                }
-            )
-        } else {
-            LazyColumn(
-                state = listState,
-                modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(16.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                items(apps, key = { it.packageName }) { app ->
-                    updateMap[app.packageName]?.let { update ->
-                        AppListItem(
-                            app = app,
-                            update = update,
-                            installActive = installActive,
-                            installing = installingPackage == app.packageName,
-                            downloadProgress = (installState as? InstallState.Downloading)?.progress,
-                            onManualUpdate = { onManualUpdate(app, update) }
-                        )
-                    }
+        LazyColumn(
+            state = listState,
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            items(apps, key = { it.packageName }) { app ->
+                updateMap[app.packageName]?.let { update ->
+                    AppListItem(
+                        app = app,
+                        update = update,
+                        installActive = installActive,
+                        installing = installingPackage == app.packageName,
+                        downloadProgress = (installState as? InstallState.Downloading)?.progress,
+                        onManualUpdate = { onManualUpdate(app, update) }
+                    )
                 }
             }
         }
@@ -252,59 +243,63 @@ private fun HomeContent(
 
 @Composable
 private fun InstallProgressSection(installState: InstallState) {
-    when (installState) {
-        is InstallState.Downloading -> LinearProgressIndicator(
-            progress = { installState.progress },
-            modifier = Modifier.fillMaxWidth()
-        )
-        is InstallState.Preparing, is InstallState.Installing -> LinearProgressIndicator(
-            modifier = Modifier.fillMaxWidth()
-        )
-        else -> Unit
+    val appName = when (installState) {
+        is InstallState.Preparing -> installState.appName
+        is InstallState.Downloading -> installState.appName
+        is InstallState.Installing -> installState.appName
+        else -> return
     }
+
+    ListItem(
+        headlineContent = { Text(appName, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+        trailingContent = {
+            Box(modifier = Modifier.size(48.dp), contentAlignment = Alignment.Center) {
+                CircularProgressIndicator(modifier = Modifier.size(24.dp))
+            }
+        }
+    )
 }
 
 @Composable
 private fun ScanStatusSection(status: ScanStatus, updatesCount: Int, onScanClick: () -> Unit) {
-    when (status) {
-        is ScanStatus.Scanning -> {
-            LinearProgressIndicator(
-                progress = {
-                    if (status.total > 0) status.processed.toFloat() / status.total else 0f
-                },
-                modifier = Modifier.fillMaxWidth()
-            )
-        }
-        is ScanStatus.Success -> {
-            ListItem(
-                headlineContent = {
-                    Text(
-                        if (updatesCount > 0) {
-                            stringResource(R.string.updates_available, updatesCount)
-                        } else {
-                            stringResource(R.string.all_apps_up_to_date)
-                        }
-                    )
-                },
-                trailingContent = {
-                    TextButton(onClick = onScanClick) { Text(stringResource(R.string.check_again)) }
+    ListItem(
+        headlineContent = {
+            Text(
+                when (status) {
+                    ScanStatus.Scanning -> stringResource(R.string.searching_for_updates)
+                    is ScanStatus.Success -> if (updatesCount > 0) {
+                        stringResource(R.string.updates_available, updatesCount)
+                    } else {
+                        stringResource(R.string.all_apps_up_to_date)
+                    }
+                    is ScanStatus.Error -> stringResource(R.string.update_check_failed)
+                    ScanStatus.Idle -> stringResource(R.string.ready_to_check)
                 }
             )
+        },
+        supportingContent = if (status is ScanStatus.Error) {
+            { Text(status.message) }
+        } else {
+            null
+        },
+        trailingContent = {
+            if (status == ScanStatus.Scanning) {
+                Box(
+                    modifier = Modifier.size(48.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    CircularProgressIndicator(modifier = Modifier.size(24.dp))
+                }
+            } else {
+                IconButton(onClick = onScanClick) {
+                    Icon(
+                        imageVector = Icons.Rounded.Refresh,
+                        contentDescription = stringResource(R.string.check_again)
+                    )
+                }
+            }
         }
-        is ScanStatus.Error -> {
-            ListItem(
-                headlineContent = { Text(stringResource(R.string.update_check_failed)) },
-                supportingContent = { Text(status.message) },
-                trailingContent = { TextButton(onClick = onScanClick) { Text(stringResource(R.string.retry)) } }
-            )
-        }
-        ScanStatus.Idle -> {
-            ListItem(
-                headlineContent = { Text(stringResource(R.string.ready_to_check)) },
-                trailingContent = { TextButton(onClick = onScanClick) { Text(stringResource(R.string.check_now)) } }
-            )
-        }
-    }
+    )
 }
 
 @Composable
@@ -416,13 +411,6 @@ private fun SettingsContent(
                 Switch(checked = includeDisabledApps, onCheckedChange = onIncludeDisabledAppsChange)
             }
         )
-    }
-}
-
-@Composable
-private fun EmptyAppsView(message: String) {
-    Box(modifier = Modifier.fillMaxSize().padding(32.dp), contentAlignment = Alignment.Center) {
-        Text(message, style = MaterialTheme.typography.titleMedium)
     }
 }
 
