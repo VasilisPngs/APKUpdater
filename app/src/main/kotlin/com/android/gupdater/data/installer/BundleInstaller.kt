@@ -22,7 +22,7 @@ class BundleInstaller(private val context: Context) {
             val label = displayName(uri)
             val archive = File(context.cacheDir, "bundle_archive")
             try {
-                onState(InstallState.Preparing(label))
+                onState(InstallState.Installing(label))
                 copyToCache(uri, archive)
 
                 onState(InstallState.Installing(label))

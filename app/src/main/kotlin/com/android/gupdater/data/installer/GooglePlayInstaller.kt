@@ -37,7 +37,7 @@ class GooglePlayInstaller(
                 "The requested version must be newer than the installed version."
             }
 
-            onState(InstallState.Preparing(appName))
+            onState(InstallState.Installing(appName))
             directory.deleteRecursively()
             directory.mkdirs()
 
@@ -143,7 +143,7 @@ class GooglePlayInstaller(
             if (library.packageName.isBlank() || library.versionCode <= 0L) continue
             if (isSharedLibraryInstalled(library.packageName, library.versionCode)) continue
 
-            onState(InstallState.Preparing(appName))
+            onState(InstallState.Installing(appName))
             val files = purchase(
                 session = session,
                 packageName = library.packageName,

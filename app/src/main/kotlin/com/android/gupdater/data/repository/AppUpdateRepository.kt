@@ -23,11 +23,10 @@ import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.withContext
 import java.security.MessageDigest
-import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalDateTime
+import java.time.OffsetDateTime
 import java.time.ZoneOffset
-import java.time.format.DateTimeFormatter
 import java.util.Locale
 
 sealed interface ScanStatus {
@@ -210,20 +209,11 @@ class AppUpdateRepository(
         return apk.architectures.minOf(::abiIndex)
     }
 
-    private fun abiIndex(architecture: String): Int {
-        val index = deviceAbis.indexOf(architecture)
-        if (index >= 0) return index
-        if (architecture == "arm") {
-            return deviceAbis
-                .indexOfFirst { it == "armeabi-v7a" || it == "arm64-v8a" }
-                .takeIf { it >= 0 }
-                ?: UNSUPPORTED_ABI
-        }
-        return UNSUPPORTED_ABI
-    }
+    private fun abiIndex(architecture: String): Int =
+        deviceAbis.indexOf(architecture).takeIf { it >= 0 } ?: UNSUPPORTED_ABI
 
     private fun densityRank(apk: ApkMirrorApk): Int {
-        if (apk.densities.any { it in UNIVERSAL_DENSITIES }) return UNIVERSAL_DENSITY_RANK
+        if (apk.densities.contains(NO_DENSITY)) return UNIVERSAL_DENSITY_RANK
 
         val buckets = apk.densities.mapNotNull(::densityBucket)
         return when {
@@ -233,8 +223,7 @@ class AppUpdateRepository(
         }
     }
 
-    private fun densityBucket(density: String): Int? =
-        DENSITY_ALIASES[density] ?: density.removeSuffix("dpi").toIntOrNull()
+    private fun densityBucket(density: String): Int? = density.toIntOrNull()
 
     private fun matchesFormFactor(apk: ApkMirrorApk, leanbackApp: Boolean): Boolean {
         if (apk.capabilities.contains(WEAR_STANDALONE)) return false
@@ -270,19 +259,14 @@ class AppUpdateRepository(
     }.getOrNull()?.ifEmpty { null } ?: packageName
 
     private fun publishedAt(value: String): Long? {
-        val text = value.trim()
+        val text = value.trim().replace(' ', 'T')
         if (text.isEmpty()) return null
 
-        for (format in PUBLISH_DATE_FORMATS) {
-            val parsed = runCatching { format.parse(text) }.getOrNull() ?: continue
-            val instant = runCatching { Instant.from(parsed) }
-                .recoverCatching { LocalDateTime.from(parsed).toInstant(ZoneOffset.UTC) }
-                .recoverCatching { LocalDate.from(parsed).atStartOfDay(ZoneOffset.UTC).toInstant() }
-                .getOrNull()
-            if (instant != null) return instant.toEpochMilli()
-        }
-
-        return null
+        return runCatching { OffsetDateTime.parse(text).toInstant() }
+            .recoverCatching { LocalDateTime.parse(text).toInstant(ZoneOffset.UTC) }
+            .recoverCatching { LocalDate.parse(text).atStartOfDay(ZoneOffset.UTC).toInstant() }
+            .getOrNull()
+            ?.toEpochMilli()
     }
 
     private fun isStableLink(link: String): Boolean = link
@@ -323,29 +307,19 @@ class AppUpdateRepository(
         }
     }
 
-    private fun String.toAbsoluteApkMirrorUrl(): String = when {
-        startsWith("https://") || startsWith("http://") -> this
-        startsWith("/") -> "https://www.apkmirror.com$this"
-        else -> "https://www.apkmirror.com/$this"
-    }
+    private fun String.toAbsoluteApkMirrorUrl(): String = APKMIRROR_URL + this
 
     private companion object {
         const val API_BATCH_SIZE = 100
+        const val APKMIRROR_URL = "https://www.apkmirror.com"
         const val APKMIRROR_PATH_PREFIX = "/apk/"
+        const val NO_DENSITY = "nodpi"
         const val GOOGLE_DEVELOPER = "Google"
         const val WEAR_STANDALONE = "wear_standalone"
         const val LEANBACK = "leanback"
         const val LEANBACK_STANDALONE = "leanback_standalone"
         val NEWEST_FIRST = compareByDescending<AppUpdateInfo> { it.publishedAt ?: Long.MIN_VALUE }
             .thenBy { it.appName.lowercase(Locale.ROOT) }
-        val PUBLISH_DATE_FORMATS = listOf(
-            DateTimeFormatter.ISO_OFFSET_DATE_TIME,
-            DateTimeFormatter.ISO_LOCAL_DATE_TIME,
-            DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss", Locale.ROOT),
-            DateTimeFormatter.ISO_LOCAL_DATE,
-            DateTimeFormatter.RFC_1123_DATE_TIME,
-            DateTimeFormatter.ofPattern("MMMM d, yyyy", Locale.ENGLISH)
-        )
         const val UNSUPPORTED_ABI = Int.MAX_VALUE
         const val MATCHING_DENSITY_RANK = 0
         const val UNIVERSAL_DENSITY_RANK = 1
@@ -354,17 +328,7 @@ class AppUpdateRepository(
             (PackageManager.GET_SIGNING_CERTIFICATES or PackageManager.MATCH_DISABLED_COMPONENTS).toLong()
         )
         val UNIVERSAL_ARCHITECTURES = setOf("universal", "noarch")
-        val UNIVERSAL_DENSITIES = setOf("nodpi", "anydpi", "universal")
         val DENSITY_BUCKETS = listOf(120, 160, 213, 240, 320, 480, 640)
-        val DENSITY_ALIASES = mapOf(
-            "ldpi" to 120,
-            "mdpi" to 160,
-            "tvdpi" to 213,
-            "hdpi" to 240,
-            "xhdpi" to 320,
-            "xxhdpi" to 480,
-            "xxxhdpi" to 640
-        )
         val PRE_RELEASE_MARKER_PATTERN =
             Regex("(?:^|[^a-z])(alpha|beta|preview|canary|rc|release[-_ ]candidate|pre[-_ ]?release|prerelease|nightly|snapshot|debug|development|dev)(?:[^a-z]|$)", RegexOption.IGNORE_CASE)
     }
