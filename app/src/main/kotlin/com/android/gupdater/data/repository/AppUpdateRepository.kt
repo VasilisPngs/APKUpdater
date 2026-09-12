@@ -330,6 +330,6 @@ class AppUpdateRepository(
         val UNIVERSAL_ARCHITECTURES = setOf("universal", "noarch")
         val DENSITY_BUCKETS = listOf(120, 160, 213, 240, 320, 480, 640)
         val PRE_RELEASE_MARKER_PATTERN =
-            Regex("(?:^|[^a-z])(alpha|beta|preview|canary|rc|release[-_ ]candidate|pre[-_ ]?release|prerelease|nightly|snapshot|debug|development|dev)(?:[^a-z]|$)", RegexOption.IGNORE_CASE)
+            Regex("(?:^|[^a-z])(alpha|beta|canary|dev)(?:[^a-z]|$)", RegexOption.IGNORE_CASE)
     }
 }
