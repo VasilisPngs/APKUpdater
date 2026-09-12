@@ -1,7 +1,10 @@
 package com.android.gupdater.ui
 
+import android.content.Context
+import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.Canvas
+import android.net.Uri
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -324,7 +327,7 @@ private fun AppListItem(
                 }
                 Spacer(Modifier.width(8.dp))
                 FilledTonalButton(
-                    onClick = onInstallUpdate,
+                    onClick = { openUrlInBrowser(context, update.apkMirrorUrl) },
                     enabled = !installActive,
                     shape = MaterialTheme.shapes.extraLarge
                 ) {
@@ -370,3 +373,6 @@ private fun EmptyAppsView(message: String) {
     }
 }
 
+private fun openUrlInBrowser(context: Context, url: String) {
+    runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url))) }
+}
