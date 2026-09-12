@@ -21,6 +21,12 @@ import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.withContext
 import java.security.MessageDigest
+import java.time.Instant
+import java.time.LocalDate
+import java.time.LocalDateTime
+import java.time.ZoneOffset
+import java.time.format.DateTimeFormatter
+import java.util.Locale
 
 sealed interface ScanStatus {
     data object Scanning : ScanStatus
@@ -75,7 +81,9 @@ class AppUpdateRepository(
             }.awaitAll()
         }
 
-        val updates = results.mapNotNull(Result<List<AppUpdateInfo>>::getOrNull).flatten()
+        val updates = results.mapNotNull(Result<List<AppUpdateInfo>>::getOrNull)
+            .flatten()
+            .sortedWith(NEWEST_FIRST)
         val failedBatches = results.count(Result<List<AppUpdateInfo>>::isFailure)
 
         when {
@@ -106,6 +114,7 @@ class AppUpdateRepository(
                 appName = label(installed.packageName),
                 newVersionName = app.versionName,
                 newVersionCode = apk.versionCode,
+                publishedAt = publishedAt(apk.publishDate.ifBlank { app.publishDate }),
                 apkMirrorUrl = apk.link.toAbsoluteApkMirrorUrl()
             )
         }
@@ -181,6 +190,22 @@ class AppUpdateRepository(
             .trim()
     }.getOrNull()?.ifEmpty { null } ?: packageName
 
+    private fun publishedAt(value: String): Long? {
+        val text = value.trim()
+        if (text.isEmpty()) return null
+
+        for (format in PUBLISH_DATE_FORMATS) {
+            val parsed = runCatching { format.parse(text) }.getOrNull() ?: continue
+            val instant = runCatching { Instant.from(parsed) }
+                .recoverCatching { LocalDateTime.from(parsed).toInstant(ZoneOffset.UTC) }
+                .recoverCatching { LocalDate.from(parsed).atStartOfDay(ZoneOffset.UTC).toInstant() }
+                .getOrNull()
+            if (instant != null) return instant.toEpochMilli()
+        }
+
+        return null
+    }
+
     private fun isStableRelease(value: String): Boolean =
         value.isBlank() || !PRE_RELEASE_MARKER_PATTERN.containsMatchIn(value)
 
@@ -221,6 +246,16 @@ class AppUpdateRepository(
 
     private companion object {
         const val API_BATCH_SIZE = 100
+        val NEWEST_FIRST = compareByDescending<AppUpdateInfo> { it.publishedAt ?: Long.MIN_VALUE }
+            .thenBy { it.appName.lowercase(Locale.ROOT) }
+        val PUBLISH_DATE_FORMATS = listOf(
+            DateTimeFormatter.ISO_OFFSET_DATE_TIME,
+            DateTimeFormatter.ISO_LOCAL_DATE_TIME,
+            DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss", Locale.ROOT),
+            DateTimeFormatter.ISO_LOCAL_DATE,
+            DateTimeFormatter.RFC_1123_DATE_TIME,
+            DateTimeFormatter.ofPattern("MMMM d, yyyy", Locale.ENGLISH)
+        )
         const val UNSUPPORTED_ABI = Int.MAX_VALUE
         const val MATCHING_DENSITY_RANK = 0
         const val UNIVERSAL_DENSITY_RANK = 1

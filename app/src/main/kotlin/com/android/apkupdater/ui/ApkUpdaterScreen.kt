@@ -127,10 +127,9 @@ fun ApkUpdaterScreen(
     val updateMap = remember(uiState.updates) {
         uiState.updates.associateBy(AppUpdateInfo::packageName)
     }
-    val appsWithUpdates = remember(uiState.installedApps, updateMap) {
-        uiState.installedApps
-            .filter { updateMap.containsKey(it.packageName) }
-            .sortedBy { updateMap.getValue(it.packageName).appName.lowercase() }
+    val appsWithUpdates = remember(uiState.installedApps, uiState.updates) {
+        val installedByPackage = uiState.installedApps.associateBy(InstalledApp::packageName)
+        uiState.updates.mapNotNull { installedByPackage[it.packageName] }
     }
 
     Scaffold(

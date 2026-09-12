@@ -38,9 +38,12 @@ class ApkMirrorClient {
             val entry = data.optJSONObject(index) ?: return@mapNotNull null
             if (!entry.optBoolean("exists")) return@mapNotNull null
 
+            val release = entry.optJSONObject("release")
+
             ApkMirrorApp(
                 packageName = entry.optString("pname"),
-                versionName = entry.optJSONObject("release")?.optString("version").orEmpty(),
+                versionName = release?.optString("version").orEmpty(),
+                publishDate = release?.optString("publish_date").orEmpty(),
                 apks = parseApks(entry.optJSONArray("apks"))
             )
         }
@@ -54,6 +57,7 @@ class ApkMirrorClient {
             ApkMirrorApk(
                 versionCode = entry.optLong("version_code"),
                 link = entry.optString("link"),
+                publishDate = entry.optString("publish_date"),
                 architectures = parseStrings(entry.optJSONArray("arches")),
                 densities = parseStrings(entry.optJSONArray("dpis")),
                 minimumApi = entry.optString("minapi").toIntOrNull() ?: 0,
