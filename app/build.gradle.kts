@@ -4,11 +4,11 @@ plugins {
 }
 
 android {
-    namespace = "com.android.apkupdater"
+    namespace = "com.android.gupdater"
     compileSdk = 37
 
     defaultConfig {
-        applicationId = "com.android.apkupdater"
+        applicationId = "com.android.gupdater"
         minSdk = 36
         targetSdk = 37
         versionCode = 1
