@@ -69,6 +69,7 @@ import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -206,6 +207,7 @@ fun GUpdaterScreen(
                 updateMap = updateMap,
                 listState = homeListState,
                 installs = uiState.installs,
+                playPackages = uiState.playPackages,
                 onScanClick = viewModel::scanForUpdates,
                 onPlayStoreUpdate = { app, update -> viewModel.installFromPlay(app, update.newVersionCode) }
             )
@@ -227,6 +229,7 @@ private fun HomeContent(
     updateMap: Map<String, AppUpdateInfo>,
     listState: LazyListState,
     installs: Map<String, InstallState>,
+    playPackages: Set<String>?,
     onScanClick: () -> Unit,
     onPlayStoreUpdate: (InstalledApp, AppUpdateInfo) -> Unit
 ) {
@@ -243,7 +246,7 @@ private fun HomeContent(
                         when (status) {
                             ScanStatus.Scanning -> stringResource(R.string.searching_for_updates)
                             is ScanStatus.Success -> if (apps.isNotEmpty()) {
-                                stringResource(R.string.updates_available, apps.size)
+                                pluralStringResource(R.plurals.updates_available, apps.size, apps.size)
                             } else {
                                 stringResource(R.string.all_apps_up_to_date)
                             }
@@ -306,6 +309,7 @@ private fun HomeContent(
                         app = app,
                         update = update,
                         installState = installs[app.packageName],
+                        playStoreAvailable = playPackages?.contains(app.packageName) != false,
                         onPlayStoreUpdate = { onPlayStoreUpdate(app, update) }
                     )
                 }
@@ -329,6 +333,7 @@ private fun AppListItem(
     app: InstalledApp,
     update: AppUpdateInfo,
     installState: InstallState?,
+    playStoreAvailable: Boolean,
     onPlayStoreUpdate: () -> Unit
 ) {
     val context = LocalContext.current
@@ -388,27 +393,29 @@ private fun AppListItem(
                 horizontalArrangement = Arrangement.End,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                FilledTonalButton(onClick = onPlayStoreUpdate) {
-                    Box(contentAlignment = Alignment.Center) {
-                        Text(
-                            text = stringResource(R.string.play_store),
-                            modifier = Modifier.alpha(if (installState == null) 1f else 0f)
-                        )
-                        when (installState) {
-                            null -> Unit
-                            is InstallState.Downloading -> CircularProgressIndicator(
-                                progress = { installState.progress },
-                                modifier = Modifier.size(20.dp),
-                                strokeWidth = 2.dp
+                if (playStoreAvailable) {
+                    FilledTonalButton(onClick = onPlayStoreUpdate) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Text(
+                                text = stringResource(R.string.play_store),
+                                modifier = Modifier.alpha(if (installState == null) 1f else 0f)
                             )
-                            else -> CircularProgressIndicator(
-                                modifier = Modifier.size(20.dp),
-                                strokeWidth = 2.dp
-                            )
+                            when (installState) {
+                                null -> Unit
+                                is InstallState.Downloading -> CircularProgressIndicator(
+                                    progress = { installState.progress },
+                                    modifier = Modifier.size(20.dp),
+                                    strokeWidth = 2.dp
+                                )
+                                else -> CircularProgressIndicator(
+                                    modifier = Modifier.size(20.dp),
+                                    strokeWidth = 2.dp
+                                )
+                            }
                         }
                     }
+                    Spacer(Modifier.width(8.dp))
                 }
-                Spacer(Modifier.width(8.dp))
                 FilledTonalButton(onClick = { openUrlInBrowser(context, update.apkMirrorUrl) }) {
                     Text(stringResource(R.string.apkmirror))
                 }

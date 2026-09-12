@@ -1,23 +1,8 @@
-# Projects Instructions
+# Android Project Instructions
 
-## Git & Repository Workflow
-- Push direct changes to `main`; do not open Pull Requests.
-- Every completed change set must be published as exactly one commit on `main`.
-
-## Product
-- This repository contains the Android app GUpdater.
-- GUpdater checks installed applications for Google LLC updates available from the APKMirror Google Inc. publisher feed.
-- System and user applications are included by default.
-- Disabled applications are excluded by default and may be included from Settings.
-- Update discovery stays on the APKMirror Google Inc. publisher feed; the Update action opens the APKMirror release page.
-- The manual action downloads a requested version code from Google Play through GPlayAPI, always over an anonymous session obtained from the Aurora dispenser, never a personal Google account.
-- The app installs APK bundles (`.apkm`, `.xapk`, `.apks`) and single APKs opened from the system or picked in the app, selecting only the splits that match the device.
-- Do not restore general-purpose application update discovery or non-Google update sources.
-
-## Releases
-- The product identity is `GUpdater`.
-- Do not add a numeric product version to the visible product identity, release name, APK filename, release tag, or API User-Agent unless explicitly requested.
-- GitHub Actions builds and publishes the GUpdater release from `main`.
+## Git & repository workflow
+- Push changes directly to `main`; do not open pull requests.
+- Publish every completed change set as exactly one commit.
 
 ## General rules
 - Do the work, build, test, lint and verify when the environment allows it.
@@ -26,20 +11,21 @@
 - Remove dead code, unused dependencies, resources, permissions and configuration.
 - Avoid unnecessary CPU, RAM, GPU, battery, storage, network use, allocations, I/O, polling and redundant state.
 - Keep code clean, direct, idiomatic and maintainable.
-- All code and code comments are written in English.
+- All code is written in English.
 - Do not add explanatory or redundant comments inside code.
 - Use the latest appropriate official technologies, APIs, libraries and tools. Preview, beta, release candidate, alpha and canary are allowed when they are the newest appropriate choice.
 - Verify current versions from official sources rather than relying on outdated examples.
-- Prefer system-derived data and behavior over manually recreated or hardcoded equivalents. When the operating system or device can provide a value reliably at runtime, obtain it from the relevant official platform API and use it directly.
+- Do not add a numeric product version to the visible product identity, release name, APK filename, release tag, or API User-Agent unless explicitly requested.
 
 ## Android
 - Use the latest appropriate official Kotlin, Jetpack Compose, Material 3, AndroidX, Android SDK, Android Gradle Plugin, Gradle and supported JDK.
-- For all Android application projects, treat native Android/Google UI and UX as the default product design standard across the entire application, not only for individual screens or components.
+- Treat native Android/Google UI and UX as the default product design standard across the entire application, not only for individual screens or components.
 - Use official Android and Material 3 components, layouts, typography, interaction patterns, navigation, loading/progress states, dialogs, controls and other native interaction patterns wherever the platform provides an appropriate solution.
 - Prefer platform-provided behavior, visuals and semantics over custom implementations or imitations of native Android UI.
 - Use platform defaults and dynamic color where appropriate; do not create custom application-wide palettes or themes.
 - Query actual device capabilities and system-provided application/device data instead of assuming manufacturer-specific behavior or duplicating information already exposed by Android.
 - Prefer system-provided application metadata such as icons, labels and package information instead of duplicating those values in app resources or hardcoded mappings.
+- Prefer system-derived data and behavior over manually recreated or hardcoded equivalents. When the operating system or device can provide a value reliably at runtime, obtain it from the relevant official platform API and use it directly.
 - Keep expensive work away from the UI thread.
 - Prefer current Android APIs and remove obsolete compatibility layers and workarounds.
 

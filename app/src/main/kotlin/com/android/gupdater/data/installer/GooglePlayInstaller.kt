@@ -19,10 +19,11 @@ import okhttp3.Request
 import java.io.File
 import java.security.MessageDigest
 
-class GooglePlayInstaller(private val context: Context) {
-
+class GooglePlayInstaller(
+    private val context: Context,
+    private val authProvider: PlayAuthProvider
+) {
     private val packageInstaller = PackageInstallerManager(context)
-    private val authProvider = PlayAuthProvider(context)
 
     suspend fun install(
         app: InstalledApp,

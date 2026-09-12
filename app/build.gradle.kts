@@ -59,11 +59,7 @@ dependencies {
     implementation(libs.androidx.compose.material.icons.core)
     implementation(libs.androidx.compose.material3)
     implementation(libs.androidx.compose.ui)
-    implementation(libs.moshi)
-    implementation(libs.moshi.kotlin)
     implementation(libs.okhttp)
-    implementation(libs.retrofit)
-    implementation(libs.converter.moshi)
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.aurora.gplayapi)
 }

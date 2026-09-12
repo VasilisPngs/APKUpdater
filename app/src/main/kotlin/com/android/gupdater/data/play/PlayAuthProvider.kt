@@ -42,7 +42,7 @@ class PlayAuthProvider(private val context: Context) {
 
         val request = Request.Builder()
             .url(DISPENSER_URL)
-            .header("User-Agent", userAgent())
+            .header("User-Agent", USER_AGENT)
             .post(payload.toRequestBody(JSON_MEDIA_TYPE))
             .build()
 
@@ -67,11 +67,6 @@ class PlayAuthProvider(private val context: Context) {
         return email to token
     }
 
-    private fun userAgent(): String {
-        val packageInfo = context.packageManager.getPackageInfo(context.packageName, 0)
-        return "${context.packageName}-${packageInfo.longVersionCode}"
-    }
-
     private fun dispenserError(code: Int): String = when (code) {
         400 -> "The account dispenser rejected the device configuration."
         403 -> "The account dispenser refused this network."
@@ -81,6 +76,7 @@ class PlayAuthProvider(private val context: Context) {
     }
 
     private companion object {
+        const val USER_AGENT = "GUpdater"
         const val DISPENSER_HOST = "auroraoss.com"
         const val DISPENSER_URL = "https://auroraoss.com/api/auth/"
         val JSON_MEDIA_TYPE = "application/json".toMediaType()

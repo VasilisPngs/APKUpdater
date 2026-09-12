@@ -4,10 +4,9 @@ import android.content.Context
 import android.content.pm.PackageManager
 import android.content.pm.SigningInfo
 import android.os.Build
-import com.android.gupdater.data.api.ApkMirrorService
-import com.android.gupdater.data.model.AppExistsApk
-import com.android.gupdater.data.model.AppExistsRequest
-import com.android.gupdater.data.model.AppExistsResponseData
+import com.android.gupdater.data.api.ApkMirrorClient
+import com.android.gupdater.data.model.ApkMirrorApk
+import com.android.gupdater.data.model.ApkMirrorApp
 import com.android.gupdater.data.model.AppUpdateInfo
 import com.android.gupdater.data.model.InstalledApp
 import kotlinx.coroutines.CancellationException
@@ -29,7 +28,7 @@ sealed interface ScanStatus {
 
 class AppUpdateRepository(
     context: Context,
-    private val service: ApkMirrorService = ApkMirrorService.create()
+    private val client: ApkMirrorClient = ApkMirrorClient()
 ) {
     private val packageManager = context.packageManager
     private val isAndroidTv = packageManager.hasSystemFeature(PackageManager.FEATURE_LEANBACK)
@@ -55,6 +54,26 @@ class AppUpdateRepository(
         }
     }
 
+    suspend fun getInstalledApp(packageName: String): InstalledApp? = withContext(Dispatchers.IO) {
+        runCatching {
+            val packageInfo = packageManager.getPackageInfo(
+                packageName,
+                PackageManager.PackageInfoFlags.of(
+                    (PackageManager.GET_SIGNING_CERTIFICATES or PackageManager.MATCH_DISABLED_COMPONENTS).toLong()
+                )
+            )
+            val appInfo = packageInfo.applicationInfo ?: return@runCatching null
+
+            InstalledApp(
+                packageName = packageInfo.packageName,
+                versionName = packageInfo.versionName ?: "Unknown",
+                versionCode = packageInfo.longVersionCode,
+                signatureSha1s = packageInfo.signingInfo.sha1Signatures(),
+                isEnabled = appInfo.enabled
+            )
+        }.getOrNull()
+    }
+
     fun scanForUpdates(appsToCheck: List<InstalledApp>): Flow<ScanStatus> = flow {
         if (appsToCheck.isEmpty()) {
             emit(ScanStatus.Success(emptyList()))
@@ -69,13 +88,8 @@ class AppUpdateRepository(
             batches.map { batch ->
                 async {
                     try {
-                        val response = service.appExists(
-                            AppExistsRequest(
-                                pnames = batch.map(InstalledApp::packageName),
-                                exclude = STABLE_RELEASE_EXCLUSIONS
-                            )
-                        )
-                        Result.success(parseUpdates(response.data, batch))
+                        val apps = client.appExists(batch.map(InstalledApp::packageName))
+                        Result.success(parseUpdates(apps, batch))
                     } catch (exception: CancellationException) {
                         throw exception
                     } catch (exception: Exception) {
@@ -100,42 +114,36 @@ class AppUpdateRepository(
     }.flowOn(Dispatchers.IO)
 
     private fun parseUpdates(
-        apiDataList: List<AppExistsResponseData>,
+        apps: List<ApkMirrorApp>,
         installedBatch: List<InstalledApp>
     ): List<AppUpdateInfo> {
         val installedByPackage = installedBatch.associateBy(InstalledApp::packageName)
 
-        return apiDataList.asSequence()
-            .filter { it.exists == true }
-            .mapNotNull { data ->
-                val installed = installedByPackage[data.pname] ?: return@mapNotNull null
-                val release = data.release ?: return@mapNotNull null
-                val bestApk = data.apks.asSequence()
-                    .filter { apk -> filterSignature(apk, installed.signatureSha1s) }
-                    .filter(::filterArchitecture)
-                    .filter(::filterMinimumApi)
-                    .filter(::filterAndroidTv)
-                    .filter(::filterWearOs)
-                    .filter(::filterStableRelease)
-                    .filter { it.versionCode > installed.versionCode }
-                    .maxByOrNull(AppExistsApk::versionCode)
-                    ?: return@mapNotNull null
+        return apps.mapNotNull { app ->
+            val installed = installedByPackage[app.packageName] ?: return@mapNotNull null
+            val bestApk = app.apks.asSequence()
+                .filter { apk -> filterSignature(apk, installed.signatureSha1s) }
+                .filter(::filterArchitecture)
+                .filter(::filterMinimumApi)
+                .filter(::filterAndroidTv)
+                .filter(::filterWearOs)
+                .filter { isStableRelease(it.link) }
+                .filter { it.versionCode > installed.versionCode }
+                .maxByOrNull(ApkMirrorApk::versionCode)
+                ?: return@mapNotNull null
 
-                val url = bestApk.link.toAbsoluteApkMirrorUrl()
-                if (!url.startsWith(GOOGLE_APKMIRROR_PREFIX)) return@mapNotNull null
-                if (!isStableRelease(release.version) || !isStableRelease(url)) return@mapNotNull null
+            val url = bestApk.link.toAbsoluteApkMirrorUrl()
+            if (!url.startsWith(GOOGLE_APKMIRROR_PREFIX)) return@mapNotNull null
+            if (!isStableRelease(app.versionName)) return@mapNotNull null
 
-                AppUpdateInfo(
-                    packageName = installed.packageName,
-                    appName = label(installed.packageName),
-                    currentVersionName = installed.versionName,
-                    currentVersionCode = installed.versionCode,
-                    newVersionName = release.version.orEmpty(),
-                    newVersionCode = bestApk.versionCode,
-                    apkMirrorUrl = url
-                )
-            }
-            .toList()
+            AppUpdateInfo(
+                packageName = installed.packageName,
+                appName = label(installed.packageName),
+                newVersionName = app.versionName,
+                newVersionCode = bestApk.versionCode,
+                apkMirrorUrl = url
+            )
+        }
     }
 
     private fun label(packageName: String): String = runCatching {
@@ -145,14 +153,12 @@ class AppUpdateRepository(
             .trim()
     }.getOrNull()?.ifEmpty { null } ?: packageName
 
-    private fun filterSignature(apk: AppExistsApk, installedSignatures: Set<String>): Boolean {
-        val signatures = apk.signaturesSha1.orEmpty()
-        return signatures.isEmpty() || signatures.any { it in installedSignatures }
-    }
+    private fun filterSignature(apk: ApkMirrorApk, installedSignatures: Set<String>): Boolean =
+        apk.signatureSha1s.isEmpty() || apk.signatureSha1s.any { it in installedSignatures }
 
-    private fun filterArchitecture(apk: AppExistsApk): Boolean {
-        if (apk.arches.isEmpty()) return true
-        val arches = apk.arches.map(String::lowercase)
+    private fun filterArchitecture(apk: ApkMirrorApk): Boolean {
+        if (apk.architectures.isEmpty()) return true
+        val arches = apk.architectures.map(String::lowercase)
         if (arches.any { it == "universal" || it == "noarch" }) return true
         return arches.any { arch ->
             arch in deviceAbis ||
@@ -160,30 +166,20 @@ class AppUpdateRepository(
         }
     }
 
-    private fun filterAndroidTv(apk: AppExistsApk): Boolean {
-        val capabilities = apk.capabilities.orEmpty()
-        return if (isAndroidTv) {
-            capabilities.contains("leanback_standalone") || capabilities.contains("leanback")
-        } else {
-            !capabilities.contains("leanback_standalone")
-        }
+    private fun filterAndroidTv(apk: ApkMirrorApk): Boolean = if (isAndroidTv) {
+        apk.capabilities.contains("leanback_standalone") || apk.capabilities.contains("leanback")
+    } else {
+        !apk.capabilities.contains("leanback_standalone")
     }
 
-    private fun filterWearOs(apk: AppExistsApk): Boolean =
-        !apk.capabilities.orEmpty().contains("wear_standalone")
+    private fun filterWearOs(apk: ApkMirrorApk): Boolean =
+        !apk.capabilities.contains("wear_standalone")
 
-    private fun filterMinimumApi(apk: AppExistsApk): Boolean = apk.minapi
-        ?.toIntOrNull()
-        ?.let { it <= Build.VERSION.SDK_INT }
-        ?: true
+    private fun filterMinimumApi(apk: ApkMirrorApk): Boolean =
+        apk.minimumApi <= Build.VERSION.SDK_INT
 
-    private fun filterStableRelease(apk: AppExistsApk): Boolean =
-        isStableRelease(apk.link)
-
-    private fun isStableRelease(value: String?): Boolean {
-        if (value.isNullOrBlank()) return true
-        return !PRE_RELEASE_MARKER_PATTERN.containsMatchIn(value)
-    }
+    private fun isStableRelease(value: String): Boolean =
+        value.isBlank() || !PRE_RELEASE_MARKER_PATTERN.containsMatchIn(value)
 
     private fun SigningInfo?.sha1Signatures(): Set<String> = this
         ?.let { signingInfo ->
@@ -210,7 +206,6 @@ class AppUpdateRepository(
     private companion object {
         const val API_BATCH_SIZE = 100
         const val GOOGLE_APKMIRROR_PREFIX = "https://www.apkmirror.com/apk/google-inc/"
-        val STABLE_RELEASE_EXCLUSIONS = listOf("alpha", "beta")
         val PRE_RELEASE_MARKER_PATTERN =
             Regex("(?:^|[^a-z])(alpha|beta|preview|canary|rc|release[-_ ]candidate|pre[-_ ]?release|prerelease|nightly|snapshot|debug|development|dev)(?:[^a-z]|$)", RegexOption.IGNORE_CASE)
     }

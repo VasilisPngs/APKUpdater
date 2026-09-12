@@ -11,8 +11,6 @@ data class InstalledApp(
 data class AppUpdateInfo(
     val packageName: String,
     val appName: String,
-    val currentVersionName: String,
-    val currentVersionCode: Long,
     val newVersionName: String,
     val newVersionCode: Long,
     val apkMirrorUrl: String

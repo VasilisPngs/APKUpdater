@@ -5,7 +5,10 @@
     <string name="apkmirror">APKMirror</string>
     <string name="play_store">Play Store</string>
     <string name="searching_for_updates">Searching for Google app updates</string>
-    <string name="updates_available">%1$d Google app updates available</string>
+    <plurals name="updates_available">
+        <item quantity="one">%1$d Google app update available</item>
+        <item quantity="other">%1$d Google app updates available</item>
+    </plurals>
     <string name="all_apps_up_to_date">All installed Google apps are up to date</string>
     <string name="check_again">Check again</string>
     <string name="update_check_failed">Google update check failed</string>

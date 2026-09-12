@@ -9,9 +9,12 @@ import com.android.gupdater.data.installer.GooglePlayInstaller
 import com.android.gupdater.data.model.AppUpdateInfo
 import com.android.gupdater.data.model.InstallState
 import com.android.gupdater.data.model.InstalledApp
+import com.android.gupdater.data.play.PlayAuthProvider
+import com.android.gupdater.data.play.PlayCatalog
 import com.android.gupdater.data.preferences.AppPreferences
 import com.android.gupdater.data.repository.AppUpdateRepository
 import com.android.gupdater.data.repository.ScanStatus
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -34,6 +37,7 @@ data class UpdaterUiState(
     val scanStatus: ScanStatus = ScanStatus.Scanning,
     val installedApps: List<InstalledApp> = emptyList(),
     val updates: List<AppUpdateInfo> = emptyList(),
+    val playPackages: Set<String>? = null,
     val includeDisabledApps: Boolean = false,
     val installs: Map<String, InstallState> = emptyMap()
 )
@@ -41,7 +45,9 @@ data class UpdaterUiState(
 class GUpdaterViewModel(application: Application) : AndroidViewModel(application) {
     private val repository = AppUpdateRepository(application.applicationContext)
     private val preferences = AppPreferences(application.applicationContext)
-    private val googlePlayInstaller = GooglePlayInstaller(application.applicationContext)
+    private val authProvider = PlayAuthProvider(application.applicationContext)
+    private val playCatalog = PlayCatalog(authProvider)
+    private val googlePlayInstaller = GooglePlayInstaller(application.applicationContext, authProvider)
     private val bundleInstaller = BundleInstaller(application.applicationContext)
     private val _uiState = MutableStateFlow(
         UpdaterUiState(includeDisabledApps = preferences.includeDisabledApps)
@@ -49,25 +55,19 @@ class GUpdaterViewModel(application: Application) : AndroidViewModel(application
     private val _events = MutableSharedFlow<InstallEvent>(extraBufferCapacity = 16)
     private val installJobs = ConcurrentHashMap<String, Job>()
     private var scanJob: Job? = null
-    private var installFailed = false
+    private var playJob: Job? = null
 
     val uiState: StateFlow<UpdaterUiState> = _uiState.asStateFlow()
     val events: SharedFlow<InstallEvent> = _events.asSharedFlow()
 
     init {
-        refreshInstalledAppsAndScan()
-    }
-
-    fun refreshInstalledAppsAndScan() {
-        viewModelScope.launch(Dispatchers.IO) {
-            val apps = repository.getInstalledApps()
-            _uiState.update { it.copy(installedApps = apps) }
+        viewModelScope.launch {
+            _uiState.update { it.copy(installedApps = repository.getInstalledApps()) }
             scanForUpdates()
         }
     }
 
     fun scanForUpdates() {
-        installFailed = false
         scanJob?.cancel()
         scanJob = viewModelScope.launch {
             val state = _uiState.value
@@ -92,15 +92,17 @@ class GUpdaterViewModel(application: Application) : AndroidViewModel(application
                         )
                     }
                 }
+                if (status !is ScanStatus.Scanning) refreshPlayAvailability()
             }
         }
     }
 
-    fun installFromPlay(app: InstalledApp, versionCode: Long) = install(app.packageName) { onState ->
-        googlePlayInstaller.install(app, versionCode, onState)
-    }
+    fun installFromPlay(app: InstalledApp, versionCode: Long) =
+        install(app.packageName, app.packageName) { onState ->
+            googlePlayInstaller.install(app, versionCode, onState)
+        }
 
-    fun installBundle(uri: Uri) = install(uri.toString()) { onState ->
+    fun installBundle(uri: Uri) = install(uri.toString(), packageName = null) { onState ->
         bundleInstaller.install(uri, onState)
     }
 
@@ -113,10 +115,10 @@ class GUpdaterViewModel(application: Application) : AndroidViewModel(application
 
     private fun install(
         key: String,
+        packageName: String?,
         block: suspend (onState: (InstallState) -> Unit) -> Result<Unit>
     ) {
         if (installJobs.containsKey(key)) return
-        scanJob?.cancel()
 
         installJobs[key] = viewModelScope.launch {
             val result = withContext(Dispatchers.IO) {
@@ -132,29 +134,60 @@ class GUpdaterViewModel(application: Application) : AndroidViewModel(application
 
             installJobs.remove(key)
             _uiState.update { it.copy(installs = it.installs - key) }
-            if (result.isFailure) installFailed = true
 
             if (result.isSuccess) {
-                val apps = withContext(Dispatchers.IO) { repository.getInstalledApps() }
-                val installedVersions = apps.associate { it.packageName to it.versionCode }
-                _uiState.update { state ->
-                    state.copy(
-                        installedApps = apps,
-                        updates = state.updates.filter { update ->
-                            update.newVersionCode > (installedVersions[update.packageName] ?: 0L)
-                        }
-                    )
+                if (packageName != null) dropUpdate(packageName) else dropInstalledUpdates()
+            }
+        }
+    }
+
+    private suspend fun dropUpdate(packageName: String) {
+        val installed = repository.getInstalledApp(packageName) ?: return
+        _uiState.update { state ->
+            state.copy(
+                installedApps = state.installedApps.map {
+                    if (it.packageName == packageName) installed else it
+                },
+                updates = state.updates.filterNot {
+                    it.packageName == packageName && it.newVersionCode <= installed.versionCode
                 }
+            )
+        }
+    }
+
+    private suspend fun dropInstalledUpdates() {
+        val apps = repository.getInstalledApps()
+        val versions = apps.associate { it.packageName to it.versionCode }
+        _uiState.update { state ->
+            state.copy(
+                installedApps = apps,
+                updates = state.updates.filter {
+                    it.newVersionCode > (versions[it.packageName] ?: 0L)
+                }
+            )
+        }
+    }
+
+    private fun refreshPlayAvailability() {
+        val packageNames = _uiState.value.updates.map(AppUpdateInfo::packageName)
+        if (packageNames.isEmpty()) return
+
+        playJob?.cancel()
+        playJob = viewModelScope.launch(Dispatchers.IO) {
+            val available = try {
+                playCatalog.availablePackages(packageNames)
+            } catch (exception: CancellationException) {
+                throw exception
+            } catch (_: Exception) {
+                return@launch
             }
-            if (installJobs.isEmpty()) {
-                if (!installFailed) scanForUpdates()
-                installFailed = false
-            }
+            _uiState.update { it.copy(playPackages = available) }
         }
     }
 
     override fun onCleared() {
         scanJob?.cancel()
+        playJob?.cancel()
         installJobs.values.forEach(Job::cancel)
         super.onCleared()
     }
