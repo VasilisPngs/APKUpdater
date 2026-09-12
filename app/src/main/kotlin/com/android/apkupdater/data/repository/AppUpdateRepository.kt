@@ -128,6 +128,7 @@ class AppUpdateRepository(
         apkMirrorUpdates.forEach { byPackage[it.packageName] = it }
 
         playUpdates.forEach { (packageName, playApp) ->
+            if (!isStableRelease(playApp.versionName)) return@forEach
             val update = byPackage[packageName]
             byPackage[packageName] = update?.copy(
                 newVersionName = playApp.versionName.ifBlank { update.newVersionName },
@@ -175,6 +176,7 @@ class AppUpdateRepository(
         .asSequence()
         .filter { it.versionCode > installed.versionCode }
         .filter { it.minimumApi <= Build.VERSION.SDK_INT }
+        .filter { isStableRelease(applicationSlug(it.link)) }
         .filter(::matchesFormFactor)
         .filter { matchesSignature(it, installed) }
         .filter { abiRank(it) != UNSUPPORTED_ABI }
@@ -257,6 +259,9 @@ class AppUpdateRepository(
         return null
     }
 
+    private fun applicationSlug(link: String): String =
+        link.substringAfter(APKMIRROR_PATH_PREFIX, "").split('/').getOrNull(1).orEmpty()
+
     private fun isStableRelease(value: String): Boolean =
         value.isBlank() || !PRE_RELEASE_MARKER_PATTERN.containsMatchIn(value)
 
@@ -297,6 +302,7 @@ class AppUpdateRepository(
 
     private companion object {
         const val API_BATCH_SIZE = 100
+        const val APKMIRROR_PATH_PREFIX = "/apk/"
         val NEWEST_FIRST = compareByDescending<AppUpdateInfo> { it.publishedAt ?: Long.MIN_VALUE }
             .thenBy { it.appName.lowercase(Locale.ROOT) }
         val PUBLISH_DATE_FORMATS = listOf(
