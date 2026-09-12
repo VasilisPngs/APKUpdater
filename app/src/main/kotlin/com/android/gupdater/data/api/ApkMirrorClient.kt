@@ -25,7 +25,7 @@ class ApkMirrorClient {
             .build()
 
         val body = SharedHttpClient.instance.newCall(request).execute().use { response ->
-            if (!response.isSuccessful) throw IOException("APKMirror responded with ${response.code}.")
+            if (!response.isSuccessful) throw IOException("HTTP ${response.code}")
             response.body.string()
         }
 

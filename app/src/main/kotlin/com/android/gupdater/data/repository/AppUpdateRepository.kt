@@ -68,7 +68,7 @@ class AppUpdateRepository(
 
         emit(ScanStatus.Scanning)
 
-        val play: Map<String, PlayApp>?
+        val play: Result<Map<String, PlayApp>>
         val results: List<Result<List<AppUpdateInfo>>>
 
         coroutineScope {
@@ -90,16 +90,17 @@ class AppUpdateRepository(
 
         val updates = merge(
             results.mapNotNull(Result<List<AppUpdateInfo>>::getOrNull).flatten(),
-            play.orEmpty(),
+            play.getOrNull().orEmpty(),
             appsToCheck
         )
         val failedBatches = results.count(Result<List<AppUpdateInfo>>::isFailure)
+        val apkMirrorReason = results.firstNotNullOfOrNull { it.exceptionOrNull() }?.let(::reason)
         val failures = buildList {
             when {
-                failedBatches == batches.size -> add("APKMirror could not be reached.")
-                failedBatches > 0 -> add("Some applications could not be checked on APKMirror.")
+                failedBatches == batches.size -> add("APKMirror: $apkMirrorReason")
+                failedBatches > 0 -> add("Some applications were not checked on APKMirror: $apkMirrorReason")
             }
-            if (play == null) add("Google Play could not be reached.")
+            play.exceptionOrNull()?.let { add("Google Play: ${reason(it)}") }
         }
 
         if (failures.isEmpty()) {
@@ -109,10 +110,12 @@ class AppUpdateRepository(
         }
     }.flowOn(Dispatchers.IO)
 
-    private fun playDetails(apps: List<InstalledApp>): Map<String, PlayApp>? =
+    private fun playDetails(apps: List<InstalledApp>): Result<Map<String, PlayApp>> =
         runCatching { playCatalog.details(apps.map(InstalledApp::packageName)) }
-            .getOrNull()
-            ?.filter { (_, playApp) -> isGoogleApp(playApp.developerName) }
+            .map { details -> details.filter { (_, playApp) -> isGoogleApp(playApp.developerName) } }
+
+    private fun reason(exception: Throwable): String =
+        exception.message?.takeIf(String::isNotBlank) ?: exception::class.simpleName.orEmpty()
 
     private fun merge(
         apkMirrorUpdates: List<AppUpdateInfo>,
