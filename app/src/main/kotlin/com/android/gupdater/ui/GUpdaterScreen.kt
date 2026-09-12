@@ -141,7 +141,7 @@ fun GUpdaterScreen(
                     DropdownMenu(
                         expanded = menuExpanded,
                         onDismissRequest = { menuExpanded = false },
-                        shape = MaterialTheme.shapes.large
+                        shape = MaterialTheme.shapes.extraLarge
                     ) {
                         DropdownMenuItem(
                             text = { Text(stringResource(R.string.install_bundle)) },
@@ -297,7 +297,7 @@ private fun HomeContent(
 private fun RoundedSection(content: @Composable () -> Unit) {
     Card(
         modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
-        shape = MaterialTheme.shapes.large
+        shape = MaterialTheme.shapes.extraLarge
     ) {
         content()
     }
@@ -320,7 +320,7 @@ private fun AppListItem(
         }
     }
 
-    Card(modifier = Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.large) {
+    Card(modifier = Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.extraLarge) {
         Column(modifier = Modifier.fillMaxWidth().padding(20.dp)) {
             Row(verticalAlignment = Alignment.Top) {
                 if (iconBitmap != null) {
