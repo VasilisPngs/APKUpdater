@@ -1,4 +1,4 @@
-package com.android.apkupdater.ui
+package com.android.gupdater.ui
 
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.padding
@@ -19,8 +19,8 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
-import com.android.apkupdater.R
-import com.android.apkupdater.data.model.InstalledApp
+import com.android.gupdater.R
+import com.android.gupdater.data.model.InstalledApp
 
 @Composable
 fun ManualUpdateDialog(
