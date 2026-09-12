@@ -27,12 +27,14 @@
 - Do not add explanatory or redundant comments inside code.
 - Use the latest appropriate official technologies, APIs, libraries and tools. Preview, beta, release candidate, alpha and canary are allowed when they are the newest appropriate choice.
 - Verify current versions from official sources rather than relying on outdated examples.
+- Prefer system-derived data and behavior over manually recreated or hardcoded equivalents. When the operating system or device can provide a value reliably at runtime, obtain it from the relevant official platform API and use it directly.
 
 ## Android
 - Use the latest appropriate official Kotlin, Jetpack Compose, Material 3, AndroidX, Android SDK, Android Gradle Plugin, Gradle and supported JDK.
 - Use official Android and Material 3 components and native interaction patterns.
 - Use platform defaults and dynamic color where appropriate; do not create custom application-wide palettes or themes.
 - Query actual device capabilities instead of assuming manufacturer-specific behavior.
+- Prefer system-provided application metadata such as icons, labels and package information instead of duplicating those values in app resources or hardcoded mappings.
 - Keep expensive work away from the UI thread.
 - Prefer current Android APIs and remove obsolete compatibility layers and workarounds.
 
