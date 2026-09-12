@@ -55,16 +55,20 @@ class ApkMirrorClient {
                 versionCode = entry.optLong("version_code"),
                 link = entry.optString("link"),
                 architectures = parseStrings(entry.optJSONArray("arches")),
+                densities = parseStrings(entry.optJSONArray("dpis")),
                 minimumApi = entry.optString("minapi").toIntOrNull() ?: 0,
                 capabilities = parseStrings(entry.optJSONArray("capabilities")),
-                signatureSha1s = parseStrings(entry.optJSONArray("signatures-sha1"))
+                signatureSha1s = parseStrings(entry.optJSONArray("signatures-sha1")),
+                signatureSha256s = parseStrings(entry.optJSONArray("signatures-sha256"))
             )
         }
     }
 
     private fun parseStrings(values: JSONArray?): List<String> {
         if (values == null) return emptyList()
-        return (0 until values.length()).mapNotNull { index -> values.optString(index).ifBlank { null } }
+        return (0 until values.length()).mapNotNull { index ->
+            values.optString(index).lowercase().ifBlank { null }
+        }
     }
 
     private companion object {

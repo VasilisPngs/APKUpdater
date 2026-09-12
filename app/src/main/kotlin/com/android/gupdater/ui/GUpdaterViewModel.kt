@@ -9,6 +9,7 @@ import com.android.gupdater.data.installer.GooglePlayInstaller
 import com.android.gupdater.data.model.AppUpdateInfo
 import com.android.gupdater.data.model.InstallState
 import com.android.gupdater.data.model.InstalledApp
+import com.android.gupdater.data.play.PlayApp
 import com.android.gupdater.data.play.PlayAuthProvider
 import com.android.gupdater.data.play.PlayCatalog
 import com.android.gupdater.data.preferences.AppPreferences
@@ -97,25 +98,36 @@ class GUpdaterViewModel(application: Application) : AndroidViewModel(application
         updates: List<AppUpdateInfo>,
         session: Deferred<Result<Unit>>
     ) {
-        val playPackages = playAvailability(updates, session)
+        val playApps = playDetails(updates, session)
+        val resolved = playApps?.let { apps -> updates.map { it.withPlayVersionName(apps[it.packageName]) } }
         _uiState.update {
-            it.copy(scanStatus = status, updates = updates, playPackages = playPackages)
+            it.copy(
+                scanStatus = status,
+                updates = resolved ?: updates,
+                playPackages = playApps?.keys
+            )
         }
     }
 
-    private suspend fun playAvailability(
+    private suspend fun playDetails(
         updates: List<AppUpdateInfo>,
         session: Deferred<Result<Unit>>
-    ): Set<String>? {
+    ): Map<String, PlayApp>? {
         if (updates.isEmpty()) return null
         if (session.await().isFailure) return null
 
         val lookup = viewModelScope.async(Dispatchers.IO) {
-            runCatching { playCatalog.availablePackages(updates.map(AppUpdateInfo::packageName)) }
-                .getOrNull()
+            runCatching { playCatalog.details(updates.map(AppUpdateInfo::packageName)) }.getOrNull()
         }
         return withTimeoutOrNull(PLAY_LOOKUP_TIMEOUT) { lookup.await() }
     }
+
+    private fun AppUpdateInfo.withPlayVersionName(playApp: PlayApp?): AppUpdateInfo =
+        if (playApp != null && playApp.versionCode == newVersionCode && playApp.versionName.isNotBlank()) {
+            copy(newVersionName = playApp.versionName)
+        } else {
+            this
+        }
 
     fun installFromPlay(app: InstalledApp, versionCode: Long) =
         install(app.packageName, app.packageName) { onState ->

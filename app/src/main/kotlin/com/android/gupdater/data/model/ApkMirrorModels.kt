@@ -10,7 +10,9 @@ data class ApkMirrorApk(
     val versionCode: Long,
     val link: String,
     val architectures: List<String>,
+    val densities: List<String>,
     val minimumApi: Int,
     val capabilities: List<String>,
-    val signatureSha1s: List<String>
+    val signatureSha1s: List<String>,
+    val signatureSha256s: List<String>
 )

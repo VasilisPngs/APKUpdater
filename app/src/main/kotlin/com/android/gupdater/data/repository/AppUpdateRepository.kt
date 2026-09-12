@@ -1,7 +1,9 @@
 package com.android.gupdater.data.repository
 
 import android.content.Context
+import android.content.pm.PackageInfo
 import android.content.pm.PackageManager
+import android.content.pm.Signature
 import android.content.pm.SigningInfo
 import android.os.Build
 import com.android.gupdater.data.api.ApkMirrorClient
@@ -34,45 +36,16 @@ class AppUpdateRepository(
     private val isAndroidTv = packageManager.hasSystemFeature(PackageManager.FEATURE_LEANBACK)
     private val deviceAbis = Build.SUPPORTED_ABIS.map(String::lowercase)
     private val universalAbiRank = deviceAbis.size
+    private val deviceDensity = context.resources.displayMetrics.densityDpi
 
     suspend fun getInstalledApps(): List<InstalledApp> = withContext(Dispatchers.IO) {
-        packageManager.getInstalledPackages(
-            PackageManager.PackageInfoFlags.of(
-                (PackageManager.GET_SIGNING_CERTIFICATES or PackageManager.MATCH_DISABLED_COMPONENTS).toLong()
-            )
-        ).mapNotNull { packageInfo ->
-            runCatching {
-                val appInfo = packageInfo.applicationInfo ?: return@mapNotNull null
-
-                InstalledApp(
-                    packageName = packageInfo.packageName,
-                    versionName = packageInfo.versionName ?: "Unknown",
-                    versionCode = packageInfo.longVersionCode,
-                    signatureSha1s = packageInfo.signingInfo.sha1Signatures(),
-                    isEnabled = appInfo.enabled
-                )
-            }.getOrNull()
-        }
+        packageManager.getInstalledPackages(PACKAGE_FLAGS)
+            .mapNotNull { packageInfo -> runCatching { packageInfo.toInstalledApp() }.getOrNull() }
     }
 
     suspend fun getInstalledApp(packageName: String): InstalledApp? = withContext(Dispatchers.IO) {
-        runCatching {
-            val packageInfo = packageManager.getPackageInfo(
-                packageName,
-                PackageManager.PackageInfoFlags.of(
-                    (PackageManager.GET_SIGNING_CERTIFICATES or PackageManager.MATCH_DISABLED_COMPONENTS).toLong()
-                )
-            )
-            val appInfo = packageInfo.applicationInfo ?: return@runCatching null
-
-            InstalledApp(
-                packageName = packageInfo.packageName,
-                versionName = packageInfo.versionName ?: "Unknown",
-                versionCode = packageInfo.longVersionCode,
-                signatureSha1s = packageInfo.signingInfo.sha1Signatures(),
-                isEnabled = appInfo.enabled
-            )
-        }.getOrNull()
+        runCatching { packageManager.getPackageInfo(packageName, PACKAGE_FLAGS).toInstalledApp() }
+            .getOrNull()
     }
 
     fun scanForUpdates(appsToCheck: List<InstalledApp>): Flow<ScanStatus> = flow {
@@ -144,19 +117,19 @@ class AppUpdateRepository(
         .filter { it.minimumApi <= Build.VERSION.SDK_INT }
         .filter { isStableRelease(it.link) }
         .filter(::matchesFormFactor)
-        .filter { matchesSignature(it, installed.signatureSha1s) }
+        .filter { matchesSignature(it, installed) }
         .filter { abiRank(it) != UNSUPPORTED_ABI }
         .minWithOrNull(
             compareBy<ApkMirrorApk> { abiRank(it) }
+                .thenBy(::densityRank)
                 .thenByDescending(ApkMirrorApk::minimumApi)
                 .thenByDescending(ApkMirrorApk::versionCode)
         )
 
     private fun abiRank(apk: ApkMirrorApk): Int {
         if (apk.architectures.isEmpty()) return universalAbiRank
-        val architectures = apk.architectures.map(String::lowercase)
-        if (architectures.any { it == "universal" || it == "noarch" }) return universalAbiRank
-        return architectures.minOf(::abiIndex)
+        if (apk.architectures.any { it in UNIVERSAL_ARCHITECTURES }) return universalAbiRank
+        return apk.architectures.minOf(::abiIndex)
     }
 
     private fun abiIndex(architecture: String): Int {
@@ -171,6 +144,32 @@ class AppUpdateRepository(
         return UNSUPPORTED_ABI
     }
 
+    private fun densityRank(apk: ApkMirrorApk): Int {
+        if (apk.densities.isEmpty()) return UNIVERSAL_DENSITY_RANK
+
+        var matched = false
+        var recognised = false
+        for (density in apk.densities) {
+            if (density in UNIVERSAL_DENSITIES) return UNIVERSAL_DENSITY_RANK
+            val range = densityRange(density) ?: continue
+            recognised = true
+            if (deviceDensity in range) matched = true
+        }
+
+        return when {
+            matched -> MATCHING_DENSITY_RANK
+            recognised -> FOREIGN_DENSITY_RANK
+            else -> UNIVERSAL_DENSITY_RANK
+        }
+    }
+
+    private fun densityRange(density: String): IntRange? {
+        DENSITY_BUCKETS[density]?.let { return it..it }
+        val bounds = DENSITY_NUMBER_PATTERN.findAll(density).mapNotNull { it.value.toIntOrNull() }.toList()
+        if (bounds.isEmpty()) return null
+        return bounds.min()..bounds.max()
+    }
+
     private fun matchesFormFactor(apk: ApkMirrorApk): Boolean {
         if (apk.capabilities.contains("wear_standalone")) return false
         return if (isAndroidTv) {
@@ -180,8 +179,13 @@ class AppUpdateRepository(
         }
     }
 
-    private fun matchesSignature(apk: ApkMirrorApk, installedSignatures: Set<String>): Boolean =
-        apk.signatureSha1s.isEmpty() || apk.signatureSha1s.any { it in installedSignatures }
+    private fun matchesSignature(apk: ApkMirrorApk, installed: InstalledApp): Boolean = when {
+        apk.signatureSha256s.isNotEmpty() && installed.signatureSha256s.isNotEmpty() ->
+            apk.signatureSha256s.any { it in installed.signatureSha256s }
+        apk.signatureSha1s.isNotEmpty() && installed.signatureSha1s.isNotEmpty() ->
+            apk.signatureSha1s.any { it in installed.signatureSha1s }
+        else -> true
+    }
 
     private fun label(packageName: String): String = runCatching {
         packageManager.getApplicationInfo(packageName, PackageManager.ApplicationInfoFlags.of(0))
@@ -193,21 +197,34 @@ class AppUpdateRepository(
     private fun isStableRelease(value: String): Boolean =
         value.isBlank() || !PRE_RELEASE_MARKER_PATTERN.containsMatchIn(value)
 
-    private fun SigningInfo?.sha1Signatures(): Set<String> = this
-        ?.let { signingInfo ->
-            val certificates = if (signingInfo.hasMultipleSigners()) {
-                signingInfo.apkContentsSigners.toList()
-            } else {
-                signingInfo.signingCertificateHistory.toList()
-            }
-            certificates.mapTo(mutableSetOf()) { certificate -> certificate.sha1() }
-        }
-        ?: emptySet()
+    private fun PackageInfo.toInstalledApp(): InstalledApp? {
+        val appInfo = applicationInfo ?: return null
+        val certificates = signingInfo.certificates()
 
-    private fun android.content.pm.Signature.sha1(): String =
-        MessageDigest.getInstance("SHA-1")
-            .digest(toByteArray())
-            .joinToString("") { byte -> "%02x".format(byte.toInt() and 0xff) }
+        return InstalledApp(
+            packageName = packageName,
+            versionName = versionName ?: "Unknown",
+            versionCode = longVersionCode,
+            signatureSha1s = certificates.digests("SHA-1"),
+            signatureSha256s = certificates.digests("SHA-256"),
+            isEnabled = appInfo.enabled
+        )
+    }
+
+    private fun SigningInfo?.certificates(): List<Signature> = when {
+        this == null -> emptyList()
+        hasMultipleSigners() -> apkContentsSigners.toList()
+        else -> signingCertificateHistory.toList()
+    }
+
+    private fun List<Signature>.digests(algorithm: String): Set<String> {
+        if (isEmpty()) return emptySet()
+        val digest = MessageDigest.getInstance(algorithm)
+        return mapTo(mutableSetOf()) { signature ->
+            digest.digest(signature.toByteArray())
+                .joinToString("") { byte -> "%02x".format(byte.toInt() and 0xff) }
+        }
+    }
 
     private fun String.toAbsoluteApkMirrorUrl(): String = when {
         startsWith("https://") || startsWith("http://") -> this
@@ -218,7 +235,25 @@ class AppUpdateRepository(
     private companion object {
         const val API_BATCH_SIZE = 100
         const val UNSUPPORTED_ABI = Int.MAX_VALUE
+        const val MATCHING_DENSITY_RANK = 0
+        const val UNIVERSAL_DENSITY_RANK = 1
+        const val FOREIGN_DENSITY_RANK = 2
         const val GOOGLE_APKMIRROR_PREFIX = "https://www.apkmirror.com/apk/google-inc/"
+        val PACKAGE_FLAGS: PackageManager.PackageInfoFlags = PackageManager.PackageInfoFlags.of(
+            (PackageManager.GET_SIGNING_CERTIFICATES or PackageManager.MATCH_DISABLED_COMPONENTS).toLong()
+        )
+        val UNIVERSAL_ARCHITECTURES = setOf("universal", "noarch")
+        val UNIVERSAL_DENSITIES = setOf("nodpi", "anydpi", "universal")
+        val DENSITY_BUCKETS = mapOf(
+            "ldpi" to 120,
+            "mdpi" to 160,
+            "tvdpi" to 213,
+            "hdpi" to 240,
+            "xhdpi" to 320,
+            "xxhdpi" to 480,
+            "xxxhdpi" to 640
+        )
+        val DENSITY_NUMBER_PATTERN = Regex("\\d+")
         val PRE_RELEASE_MARKER_PATTERN =
             Regex("(?:^|[^a-z])(alpha|beta|preview|canary|rc|release[-_ ]candidate|pre[-_ ]?release|prerelease|nightly|snapshot|debug|development|dev)(?:[^a-z]|$)", RegexOption.IGNORE_CASE)
     }

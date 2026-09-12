@@ -1,7 +1,8 @@
 package com.android.gupdater.data.play
 
-import com.aurora.gplayapi.data.models.App
 import com.aurora.gplayapi.helpers.AppDetailsHelper
+
+data class PlayApp(val versionCode: Long, val versionName: String)
 
 class PlayCatalog(private val authProvider: PlayAuthProvider) {
 
@@ -9,11 +10,11 @@ class PlayCatalog(private val authProvider: PlayAuthProvider) {
         authProvider.session()
     }
 
-    fun availablePackages(packageNames: List<String>): Set<String> {
-        if (packageNames.isEmpty()) return emptySet()
+    fun details(packageNames: List<String>): Map<String, PlayApp> {
+        if (packageNames.isEmpty()) return emptyMap()
 
         return AppDetailsHelper(authProvider.session())
             .getAppByPackageName(packageNames)
-            .mapTo(mutableSetOf(), App::packageName)
+            .associate { it.packageName to PlayApp(it.versionCode, it.versionName) }
     }
 }
