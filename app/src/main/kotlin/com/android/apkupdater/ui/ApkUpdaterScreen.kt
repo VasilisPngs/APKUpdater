@@ -1,4 +1,4 @@
-package com.android.apkupdater.ui
+package com.android.gupdater.ui
 
 import android.content.Context
 import android.content.Intent
@@ -53,11 +53,11 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.android.apkupdater.R
-import com.android.apkupdater.data.model.AppUpdateInfo
-import com.android.apkupdater.data.model.InstalledApp
-import com.android.apkupdater.data.model.InstallState
-import com.android.apkupdater.data.repository.ScanStatus
+import com.android.gupdater.R
+import com.android.gupdater.data.model.AppUpdateInfo
+import com.android.gupdater.data.model.InstalledApp
+import com.android.gupdater.data.model.InstallState
+import com.android.gupdater.data.repository.ScanStatus
 import kotlinx.coroutines.launch
 
 private enum class AppTab(val labelRes: Int) {
