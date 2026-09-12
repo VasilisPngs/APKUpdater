@@ -81,7 +81,10 @@ class GUpdaterViewModel(application: Application) : AndroidViewModel(application
             repository.scanForUpdates(appsToCheck).collect { status ->
                 _uiState.update { current ->
                     when (status) {
-                        ScanStatus.Scanning -> current.copy(scanStatus = status)
+                        ScanStatus.Scanning -> current.copy(
+                            scanStatus = status,
+                            updates = emptyList()
+                        )
                         is ScanStatus.Success -> current.copy(
                             scanStatus = status,
                             updates = status.updates
