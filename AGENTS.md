@@ -31,7 +31,7 @@
 
 ## Android
 - Use the latest appropriate official Kotlin, Jetpack Compose, Material 3, AndroidX, Android SDK, Android Gradle Plugin, Gradle and supported JDK.
-- Treat native Android/Google UI and UX as the default product design standard for the entire application, not only for individual screens or components.
+- For all Android application projects, treat native Android/Google UI and UX as the default product design standard across the entire application, not only for individual screens or components.
 - Use official Android and Material 3 components, layouts, typography, interaction patterns, navigation, loading/progress states, dialogs, controls and other native interaction patterns wherever the platform provides an appropriate solution.
 - Prefer platform-provided behavior, visuals and semantics over custom implementations or imitations of native Android UI.
 - Use platform defaults and dynamic color where appropriate; do not create custom application-wide palettes or themes.
