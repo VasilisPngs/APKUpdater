@@ -2,7 +2,10 @@ package com.android.gupdater.ui
 
 import android.content.Context
 import android.content.Intent
+import android.graphics.Bitmap
+import android.graphics.Canvas
 import android.net.Uri
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -15,6 +18,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
@@ -44,11 +48,14 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
@@ -59,7 +66,9 @@ import com.android.gupdater.data.model.AppUpdateInfo
 import com.android.gupdater.data.model.InstalledApp
 import com.android.gupdater.data.model.InstallState
 import com.android.gupdater.data.repository.ScanStatus
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 private enum class AppTab(val labelRes: Int) {
     Home(R.string.home),
@@ -261,24 +270,47 @@ private fun AppListItem(
     onManualUpdate: () -> Unit
 ) {
     val context = LocalContext.current
+    val iconBitmap by produceState<Bitmap?>(initialValue = null, key1 = app.packageName) {
+        value = withContext(Dispatchers.IO) {
+            runCatching {
+                context.packageManager.getApplicationIcon(app.packageName).toBitmap()
+            }.getOrNull()
+        }
+    }
+
     OutlinedCard(modifier = Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.large) {
         Column(modifier = Modifier.fillMaxWidth().padding(20.dp)) {
-            Text(
-                text = app.appName,
-                maxLines = 3,
-                overflow = TextOverflow.Ellipsis,
-                style = MaterialTheme.typography.titleMedium
-            )
-            Spacer(Modifier.height(4.dp))
-            Text(
-                text = stringResource(R.string.version_display, app.versionName, app.versionCode),
-                style = MaterialTheme.typography.bodyLarge
-            )
-            Spacer(Modifier.height(4.dp))
-            Text(
-                text = stringResource(R.string.version_display, update.newVersionName, update.newVersionCode),
-                style = MaterialTheme.typography.bodyLarge
-            )
+            Row(verticalAlignment = Alignment.Top) {
+                if (iconBitmap != null) {
+                    Image(
+                        bitmap = iconBitmap!!.asImageBitmap(),
+                        contentDescription = app.appName,
+                        modifier = Modifier.size(56.dp),
+                        contentScale = ContentScale.Fit
+                    )
+                } else {
+                    Box(Modifier.size(56.dp))
+                }
+                Spacer(Modifier.width(16.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = app.appName,
+                        maxLines = 3,
+                        overflow = TextOverflow.Ellipsis,
+                        style = MaterialTheme.typography.titleMedium
+                    )
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        text = stringResource(R.string.version_display, app.versionName, app.versionCode),
+                        style = MaterialTheme.typography.bodyLarge
+                    )
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        text = stringResource(R.string.version_display, update.newVersionName, update.newVersionCode),
+                        style = MaterialTheme.typography.bodyLarge
+                    )
+                }
+            }
             Spacer(Modifier.height(16.dp))
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
                 FilledTonalButton(
@@ -297,6 +329,17 @@ private fun AppListItem(
                     Text(stringResource(R.string.manual))
                 }
             }
+        }
+    }
+}
+
+private fun android.graphics.drawable.Drawable.toBitmap(): Bitmap {
+    val width = intrinsicWidth.takeIf { it > 0 } ?: 1
+    val height = intrinsicHeight.takeIf { it > 0 } ?: 1
+    return Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888).also { bitmap ->
+        Canvas(bitmap).also { canvas ->
+            setBounds(0, 0, canvas.width, canvas.height)
+            draw(canvas)
         }
     }
 }
