@@ -1,4 +1,4 @@
-package com.android.gupdater.data.repository
+package com.android.apkupdater.data.repository
 
 import android.content.Context
 import android.content.pm.PackageInfo
@@ -6,11 +6,11 @@ import android.content.pm.PackageManager
 import android.content.pm.Signature
 import android.content.pm.SigningInfo
 import android.os.Build
-import com.android.gupdater.data.api.ApkMirrorClient
-import com.android.gupdater.data.model.ApkMirrorApk
-import com.android.gupdater.data.model.ApkMirrorApp
-import com.android.gupdater.data.model.AppUpdateInfo
-import com.android.gupdater.data.model.InstalledApp
+import com.android.apkupdater.data.api.ApkMirrorClient
+import com.android.apkupdater.data.model.ApkMirrorApk
+import com.android.apkupdater.data.model.ApkMirrorApp
+import com.android.apkupdater.data.model.AppUpdateInfo
+import com.android.apkupdater.data.model.InstalledApp
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
@@ -100,15 +100,13 @@ class AppUpdateRepository(
             if (!isStableRelease(app.versionName)) return@mapNotNull null
 
             val apk = bestApk(app.apks, installed) ?: return@mapNotNull null
-            val url = apk.link.toAbsoluteApkMirrorUrl()
-            if (!url.startsWith(GOOGLE_APKMIRROR_PREFIX)) return@mapNotNull null
 
             AppUpdateInfo(
                 packageName = installed.packageName,
                 appName = label(installed.packageName),
                 newVersionName = app.versionName,
                 newVersionCode = apk.versionCode,
-                apkMirrorUrl = url
+                apkMirrorUrl = apk.link.toAbsoluteApkMirrorUrl()
             )
         }
     }
@@ -117,7 +115,6 @@ class AppUpdateRepository(
         .asSequence()
         .filter { it.versionCode > installed.versionCode }
         .filter { it.minimumApi <= Build.VERSION.SDK_INT }
-        .filter { isStableRelease(it.link) }
         .filter(::matchesFormFactor)
         .filter { matchesSignature(it, installed) }
         .filter { abiRank(it) != UNSUPPORTED_ABI }
@@ -228,7 +225,6 @@ class AppUpdateRepository(
         const val MATCHING_DENSITY_RANK = 0
         const val UNIVERSAL_DENSITY_RANK = 1
         const val FOREIGN_DENSITY_RANK = 2
-        const val GOOGLE_APKMIRROR_PREFIX = "https://www.apkmirror.com/apk/google-inc/"
         val PACKAGE_FLAGS: PackageManager.PackageInfoFlags = PackageManager.PackageInfoFlags.of(
             (PackageManager.GET_SIGNING_CERTIFICATES or PackageManager.MATCH_DISABLED_COMPONENTS).toLong()
         )

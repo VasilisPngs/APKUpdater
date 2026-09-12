@@ -1,4 +1,4 @@
-package com.android.gupdater.data.model
+package com.android.apkupdater.data.model
 
 sealed interface InstallState {
     val appName: String

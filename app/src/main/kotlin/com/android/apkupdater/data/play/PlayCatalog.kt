@@ -1,4 +1,4 @@
-package com.android.gupdater.data.play
+package com.android.apkupdater.data.play
 
 import com.aurora.gplayapi.helpers.AppDetailsHelper
 

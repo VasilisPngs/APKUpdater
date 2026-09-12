@@ -95,13 +95,13 @@ jobs:
       - name: Publish release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAG_NAME: GUpdater
+          TAG_NAME: APKUpdater
         run: |
           APK_FILE="app/build/outputs/apk/release/app-release.apk"
           test -f "$APK_FILE"
-          cp "$APK_FILE" "GUpdater.apk"
+          cp "$APK_FILE" "APKUpdater.apk"
           gh release delete "$TAG_NAME" --repo "${{ github.repository }}" --yes --cleanup-tag 2>/dev/null || true
-          gh release create "$TAG_NAME" "GUpdater.apk" \
+          gh release create "$TAG_NAME" "APKUpdater.apk" \
             --repo "${{ github.repository }}" \
-            --title "GUpdater" \
+            --title "APKUpdater" \
             --notes " "

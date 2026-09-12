@@ -1,19 +1,19 @@
 <resources>
-    <string name="app_name">GUpdater</string>
+    <string name="app_name">APKUpdater</string>
     <string name="home">Home</string>
     <string name="settings">Settings</string>
     <string name="apkmirror">APKMirror</string>
     <string name="play_store">Play Store</string>
-    <string name="searching_for_updates">Searching for Google app updates</string>
+    <string name="searching_for_updates">Searching for app updates</string>
     <plurals name="updates_available">
-        <item quantity="one">%1$d Google app update available</item>
-        <item quantity="other">%1$d Google app updates available</item>
+        <item quantity="one">%1$d update available</item>
+        <item quantity="other">%1$d updates available</item>
     </plurals>
-    <string name="all_apps_up_to_date">All installed Google apps are up to date</string>
+    <string name="all_apps_up_to_date">All installed apps are up to date</string>
     <string name="check_again">Check again</string>
-    <string name="update_check_failed">Google update check failed</string>
+    <string name="update_check_failed">Update check failed</string>
     <string name="disabled_apps">Disabled apps</string>
-    <string name="disabled_apps_description">Include disabled applications when checking for Google updates</string>
+    <string name="disabled_apps_description">Include disabled applications when checking for updates</string>
     <string name="version_current">Current: v%1$s (%2$d)</string>
     <string name="version_latest">Latest: v%1$s (%2$d)</string>
     <string name="more_options">More options</string>

@@ -4,16 +4,16 @@ plugins {
 }
 
 android {
-    namespace = "com.android.gupdater"
+    namespace = "com.android.apkupdater"
     compileSdk = 37
     compileSdkMinor = 2
 
     defaultConfig {
-        applicationId = "com.android.gupdater"
+        applicationId = "com.android.apkupdater"
         minSdk = 34
         targetSdk = 37
         versionCode = (System.currentTimeMillis() / 1000).toInt()
-        versionName = "GUpdater"
+        versionName = "APKUpdater"
     }
 
     val releaseKeystore = rootProject.file("release.keystore")

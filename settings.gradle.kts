@@ -22,6 +22,6 @@ dependencyResolutionManagement {
   }
 }
 
-rootProject.name = "GUpdater"
+rootProject.name = "APKUpdater"
 
 include(":app")

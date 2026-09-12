@@ -1,20 +1,20 @@
-package com.android.gupdater.ui
+package com.android.apkupdater.ui
 
 import android.app.Application
 import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
-import com.android.gupdater.data.installer.BundleInstaller
-import com.android.gupdater.data.installer.GooglePlayInstaller
-import com.android.gupdater.data.model.AppUpdateInfo
-import com.android.gupdater.data.model.InstallState
-import com.android.gupdater.data.model.InstalledApp
-import com.android.gupdater.data.play.PlayApp
-import com.android.gupdater.data.play.PlayAuthProvider
-import com.android.gupdater.data.play.PlayCatalog
-import com.android.gupdater.data.preferences.AppPreferences
-import com.android.gupdater.data.repository.AppUpdateRepository
-import com.android.gupdater.data.repository.ScanStatus
+import com.android.apkupdater.data.installer.BundleInstaller
+import com.android.apkupdater.data.installer.GooglePlayInstaller
+import com.android.apkupdater.data.model.AppUpdateInfo
+import com.android.apkupdater.data.model.InstallState
+import com.android.apkupdater.data.model.InstalledApp
+import com.android.apkupdater.data.play.PlayApp
+import com.android.apkupdater.data.play.PlayAuthProvider
+import com.android.apkupdater.data.play.PlayCatalog
+import com.android.apkupdater.data.preferences.AppPreferences
+import com.android.apkupdater.data.repository.AppUpdateRepository
+import com.android.apkupdater.data.repository.ScanStatus
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -45,7 +45,7 @@ data class UpdaterUiState(
     val installs: Map<String, InstallState> = emptyMap()
 )
 
-class GUpdaterViewModel(application: Application) : AndroidViewModel(application) {
+class ApkUpdaterViewModel(application: Application) : AndroidViewModel(application) {
     private val repository = AppUpdateRepository(application.applicationContext)
     private val preferences = AppPreferences(application.applicationContext)
     private val authProvider = PlayAuthProvider(application.applicationContext)
