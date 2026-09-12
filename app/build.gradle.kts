@@ -11,7 +11,6 @@ android {
         applicationId = "com.android.gupdater"
         minSdk = 36
         targetSdk = 37
-        versionCode = 1
         versionName = "GUpdater"
     }
 
