@@ -140,16 +140,14 @@ class GooglePlayInstaller(private val context: Context) {
     ) {
         for (library in session.details.dependencies.dependentLibraries) {
             if (library.packageName.isBlank() || library.versionCode <= 0L) continue
-            if (isUpToDate(library)) continue
+            if (isSharedLibraryInstalled(library.packageName, library.versionCode)) continue
 
             onState(InstallState.Preparing(appName))
-            val libraryDetails = AppDetailsHelper(session.authData)
-                .getAppByPackageName(library.packageName)
             val files = purchase(
                 session = session,
                 packageName = library.packageName,
                 versionCode = library.versionCode,
-                offerType = libraryDetails.offerType
+                offerType = 0
             )
 
             val libraryDirectory = File(directory, library.packageName).apply { mkdirs() }
@@ -159,12 +157,10 @@ class GooglePlayInstaller(private val context: Context) {
         }
     }
 
-    private fun isUpToDate(library: App): Boolean {
-        val installedVersion = runCatching {
-            context.packageManager.getPackageInfo(library.packageName, 0).longVersionCode
-        }.getOrNull() ?: return false
-        return installedVersion >= library.versionCode
-    }
+    private fun isSharedLibraryInstalled(packageName: String, versionCode: Long): Boolean =
+        context.packageManager
+            .getSharedLibraries(PackageManager.PackageInfoFlags.of(0))
+            .any { it.name == packageName && it.longVersion == versionCode }
 
     private fun label(packageName: String): String = runCatching {
         context.packageManager.getApplicationInfo(
