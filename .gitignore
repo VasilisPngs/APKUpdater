@@ -11,6 +11,5 @@
 local.properties
 .env
 *.keystore
-*.keystore.enc
 release-keystore-password.txt
 .build-outputs

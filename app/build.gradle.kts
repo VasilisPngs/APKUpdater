@@ -11,6 +11,7 @@ android {
         applicationId = "com.android.gupdater"
         minSdk = 36
         targetSdk = 37
+        versionCode = (System.currentTimeMillis() / 1000).toInt()
         versionName = "GUpdater"
     }
 
@@ -36,8 +37,8 @@ android {
     }
 
     compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_21
-        targetCompatibility = JavaVersion.VERSION_21
+        sourceCompatibility = JavaVersion.VERSION_25
+        targetCompatibility = JavaVersion.VERSION_25
     }
 
     buildFeatures {

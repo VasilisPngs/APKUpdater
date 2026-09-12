@@ -1,10 +1,7 @@
 package com.android.gupdater.ui
 
-import android.content.Context
-import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.Canvas
-import android.net.Uri
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -167,6 +164,7 @@ fun GUpdaterScreen(
                 listState = homeListState,
                 installActive = installActive,
                 onScanClick = viewModel::scanForUpdates,
+                onInstallUpdate = viewModel::installUpdate,
                 onManualUpdate = { manualUpdateApp = it }
             )
             AppTab.Settings -> SettingsContent(
@@ -187,6 +185,7 @@ private fun HomeContent(
     listState: LazyListState,
     installActive: Boolean,
     onScanClick: () -> Unit,
+    onInstallUpdate: (AppUpdateInfo) -> Unit,
     onManualUpdate: (InstalledApp) -> Unit
 ) {
     Column(modifier = modifier) {
@@ -211,6 +210,7 @@ private fun HomeContent(
                             app = app,
                             update = update,
                             installActive = installActive,
+                            onInstallUpdate = { onInstallUpdate(update) },
                             onManualUpdate = { onManualUpdate(app) }
                         )
                     }
@@ -268,6 +268,7 @@ private fun AppListItem(
     app: InstalledApp,
     update: AppUpdateInfo,
     installActive: Boolean,
+    onInstallUpdate: () -> Unit,
     onManualUpdate: () -> Unit
 ) {
     val context = LocalContext.current
@@ -323,7 +324,7 @@ private fun AppListItem(
                 }
                 Spacer(Modifier.width(8.dp))
                 FilledTonalButton(
-                    onClick = { openUrlInBrowser(context, update.apkMirrorUrl) },
+                    onClick = onInstallUpdate,
                     enabled = !installActive,
                     shape = MaterialTheme.shapes.extraLarge
                 ) {
@@ -369,6 +370,3 @@ private fun EmptyAppsView(message: String) {
     }
 }
 
-private fun openUrlInBrowser(context: Context, url: String) {
-    runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url))) }
-}

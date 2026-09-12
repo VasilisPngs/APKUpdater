@@ -3,6 +3,7 @@ package com.android.gupdater.data.installer
 import android.content.Context
 import com.android.gupdater.data.model.InstalledApp
 import com.android.gupdater.data.model.InstallState
+import com.aurora.gplayapi.data.models.AuthData
 import com.aurora.gplayapi.data.models.PlayFile
 import com.aurora.gplayapi.helpers.AppDetailsHelper
 import com.aurora.gplayapi.helpers.AuthHelper
@@ -11,7 +12,6 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
-import java.lang.reflect.Method
 import okhttp3.OkHttpClient
 import okhttp3.Request
 
@@ -48,8 +48,8 @@ class GooglePlayInstaller(private val context: Context) {
                 offerType = details.offerType
             )
 
-            val apkFiles = downloadFiles(app.packageName, versionCode, files, onState)
-            installDependencies(authData, details, app.appName, onState)
+            val apkFiles = downloadFiles(app.packageName, app.appName, versionCode, files, onState)
+            installDependencies(authData, details.dependencies.dependentLibraries, app.appName, onState)
 
             onState(InstallState.Installing(app.appName, false))
             packageInstaller.install(apkFiles).getOrThrow()
@@ -66,6 +66,7 @@ class GooglePlayInstaller(private val context: Context) {
 
     private fun downloadFiles(
         packageName: String,
+        appName: String,
         versionCode: Long,
         files: List<PlayFile>,
         onState: (InstallState) -> Unit
@@ -78,7 +79,7 @@ class GooglePlayInstaller(private val context: Context) {
             mkdirs()
         }
         return apkFiles.mapIndexed { index, playFile ->
-            onState(InstallState.Downloading(packageName))
+            onState(InstallState.Downloading(appName))
             val target = File(directory, if (playFile.name.isBlank()) "apk_$index.apk" else playFile.name)
             val request = Request.Builder().url(playFile.url).build()
             httpClient.newCall(request).execute().use { response ->
@@ -93,13 +94,14 @@ class GooglePlayInstaller(private val context: Context) {
     }
 
     private suspend fun installDependencies(
-        authData: com.aurora.gplayapi.data.models.AuthData,
-        appDetails: Any,
+        authData: AuthData,
+        dependencies: List<com.aurora.gplayapi.data.models.App>,
         appName: String,
         onState: (InstallState) -> Unit
     ) {
-        val dependencyEntries = extractDependentLibraries(appDetails)
-        for ((packageName, versionCode) in dependencyEntries) {
+        for (dependency in dependencies) {
+            val packageName = dependency.packageName
+            val versionCode = dependency.versionCode
             if (packageName.isBlank() || versionCode <= 0L) continue
 
             val installedVersion = runCatching {
@@ -115,35 +117,10 @@ class GooglePlayInstaller(private val context: Context) {
                 offerType = dependencyDetails.offerType
             ).filter { it.type == PlayFile.Type.BASE || it.type == PlayFile.Type.SPLIT }
 
-            val downloaded = downloadFiles(packageName, versionCode, dependencyFiles, onState)
+            val downloaded = downloadFiles(packageName, appName, versionCode, dependencyFiles, onState)
             onState(InstallState.Installing(appName, true))
             packageInstaller.install(downloaded).getOrThrow()
             downloaded.forEach(File::delete)
         }
-    }
-
-    private fun extractDependentLibraries(appDetails: Any): List<Pair<String, Long>> {
-        val dependencies = readProperty(appDetails, "dependencies") ?: return emptyList()
-        val libraries = (readProperty(dependencies, "dependentLibraries") as? Iterable<*>)
-            ?: return emptyList()
-        return libraries.filterNotNull().mapNotNull { library ->
-            val packageName = readProperty(library, "packageName") as? String
-            val versionCode = when (val value = readProperty(library, "versionCode")) {
-                is Number -> value.toLong()
-                is String -> value.toLongOrNull()
-                else -> null
-            }
-            if (packageName != null && versionCode != null) packageName to versionCode else null
-        }
-    }
-
-    private fun readProperty(target: Any, name: String): Any? {
-        val getterName = "get" + name.replaceFirstChar(Char::uppercaseChar)
-        return runCatching {
-            val getter = target.javaClass.methods.firstOrNull { method: Method ->
-                method.name == getterName && method.parameterTypes.isEmpty()
-            } ?: return@runCatching null
-            getter.invoke(target)
-        }.getOrNull()
     }
 }
