@@ -80,7 +80,7 @@ class ApkMirrorClient {
         const val APP_EXISTS_URL = "https://www.apkmirror.com/wp-json/apkm/v1/app_exists/"
         const val USER_AGENT = "com.android.gupdater"
         const val AUTHORIZATION = "Basic YXBpLWFwa3VwZGF0ZXI6cm01cmNmcnVVakt5MDRzTXB5TVBKWFc4"
-        val EXCLUDED_CHANNELS = listOf("alpha", "beta", "rc", "test")
+        val EXCLUDED_CHANNELS = listOf("alpha", "beta")
         val JSON_MEDIA_TYPE = "application/json".toMediaType()
     }
 }
