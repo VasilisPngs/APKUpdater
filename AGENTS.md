@@ -85,4 +85,8 @@
 - App optimization with R8: https://developer.android.com/topic/performance/app-optimization/enable-app-optimization
 - Sign your app: https://developer.android.com/studio/publish/app-signing
 - Android releases: https://developer.android.com/about/versions
+- Latest Android developer updates: https://developer.android.com/latest-updates
+- AndroidX releases: https://developer.android.com/jetpack/androidx/versions
+- Compose releases: https://developer.android.com/jetpack/androidx/releases/compose
 - Compose UI release notes: https://developer.android.com/jetpack/androidx/releases/compose-ui
+- Android Gradle Plugin release notes: https://developer.android.com/build/releases/gradle-plugin
