@@ -5,7 +5,7 @@
 - Publish every completed change set as exactly one commit.
 
 ## General rules
-- Do the work, build, test, lint and verify when the environment allows it.
+- Do the work end to end.
 - Do not undo settled decisions or weaken requirements without a real technical reason.
 - Prefer root-cause fixes and the simplest architecture that fully satisfies the requirements.
 - Remove dead code, unused dependencies, resources, permissions and configuration.
@@ -19,26 +19,42 @@
 
 ## Android
 - Use the latest appropriate official Kotlin, Jetpack Compose, Material 3, AndroidX, Android SDK, Android Gradle Plugin, Gradle and supported JDK.
-- Treat native Android/Google UI and UX as the default product design standard across the entire application, not only for individual screens or components.
-- Use official Android and Material 3 components, layouts, typography, interaction patterns, navigation, loading/progress states, dialogs, controls and other native interaction patterns wherever the platform provides an appropriate solution.
-- Prefer platform-provided behavior, visuals and semantics over custom implementations or imitations of native Android UI.
+- Treat native Android/Google UI and UX as the product design standard across the entire application, using the official Material 3 components, layouts, typography, interaction patterns, navigation, loading and progress states, dialogs and controls wherever the platform provides a solution.
+- Never hand build an imitation of a native component, visual or behavior.
 - Use platform defaults and dynamic color where appropriate; do not create custom application-wide palettes or themes.
-- Query actual device capabilities and system-provided application/device data instead of assuming manufacturer-specific behavior or duplicating information already exposed by Android.
-- Prefer system-provided application metadata such as icons, labels and package information instead of duplicating those values in app resources or hardcoded mappings.
-- Prefer system-derived data and behavior over manually recreated or hardcoded equivalents. When the operating system or device can provide a value reliably at runtime, obtain it from the relevant official platform API and use it directly.
+- Obtain values from the relevant official platform API whenever the system or the device can provide them at runtime, including device capabilities, application metadata such as icons, labels and package information, locales and configuration, instead of assuming manufacturer-specific behavior or duplicating them in resources and hardcoded mappings.
 - Keep expensive work away from the UI thread.
 - Prefer current Android APIs and remove obsolete compatibility layers and workarounds.
 
 ## Blur, transparency and system surfaces
-- Build blur and transparency with the official platform and Jetpack APIs only; never with a third party effect library or a hand drawn imitation.
-- Blur inside the application, such as content that scrolls under a bar, is rendered with `BlurEffect` on a `GraphicsLayer`, backed by the platform `RenderEffect`, which requires Android 12.
+- Build blur and transparency with the official platform and Jetpack APIs only; never with a third party effect library.
+- Blur inside the application, such as content that scrolls under a bar, is rendered with `BlurEffect` on a `GraphicsLayer`, or with `Modifier.blur`, backed by the platform `RenderEffect`, which requires Android 12.
 - Blur of what lies behind the application window, such as a dialog dimming the screen, uses the cross window blur APIs `Window.setBackgroundBlurRadius`, `WindowManager.LayoutParams.FLAG_BLUR_BEHIND` and `setBlurBehindRadius`, and must query `WindowManager.isCrossWindowBlurEnabled` and register the listener, because the system disables these blurs on battery saver, on low graphics performance and by developer override.
 - Translucent surfaces stay readable when blurs are unavailable: pair them with the Material container colors instead of relying on the effect alone.
 - Draw edge to edge and let the window insets place the content, rather than reserving space manually.
 
-### Official references
-- Graphics modifiers: https://developer.android.com/develop/ui/compose/graphics/draw/modifiers
+## Verification
+- Before considering a change complete, verify build/lint results, dependencies, resources, release configuration and relevant runtime behavior.
+
+## Official references
+
+### Design and UI
+- Material Design 3 in Compose: https://developer.android.com/develop/ui/compose/designsystems/material3
+- Get started with Jetpack Compose: https://developer.android.com/develop/ui/compose/documentation
+- App bars: https://developer.android.com/develop/ui/compose/components/app-bars
+- State and Jetpack Compose: https://developer.android.com/develop/ui/compose/state
+- Side effects in Compose: https://developer.android.com/develop/ui/compose/side-effects
+- Lazy lists and grids: https://developer.android.com/develop/ui/compose/lists
+- Animations in Compose: https://developer.android.com/develop/ui/compose/animation/introduction
+- Accessibility in Compose: https://developer.android.com/develop/ui/compose/accessibility
+- Adaptive apps: https://developer.android.com/develop/ui/compose/layouts/adaptive/get-started-with-adaptive-apps
+- Support different display sizes: https://developer.android.com/develop/ui/compose/layouts/adaptive/support-different-display-sizes
+- Dynamic color: https://developer.android.com/develop/ui/views/theming/dynamic-colors
+- Dark theme: https://developer.android.com/develop/ui/views/theming/darktheme
+
+### Graphics, blur and transparency
 - Graphics in Compose: https://developer.android.com/develop/ui/compose/graphics/draw/overview
+- Graphics modifiers: https://developer.android.com/develop/ui/compose/graphics/draw/modifiers
 - BlurEffect: https://developer.android.com/reference/kotlin/androidx/compose/ui/graphics/BlurEffect
 - GraphicsLayer: https://developer.android.com/reference/kotlin/androidx/compose/ui/graphics/layer/GraphicsLayer
 - RenderEffect: https://developer.android.com/reference/android/graphics/RenderEffect
@@ -47,9 +63,26 @@
 - Window blurs: https://source.android.com/docs/core/display/window-blurs
 - Window insets: https://developer.android.com/develop/ui/compose/system/insets
 - Edge to edge: https://developer.android.com/develop/ui/views/layout/edge-to-edge
-- App bars: https://developer.android.com/develop/ui/compose/components/app-bars
-- Material Design 3 in Compose: https://developer.android.com/develop/ui/compose/designsystems/material3
-- Dynamic color: https://developer.android.com/develop/ui/views/theming/dynamic-colors
 
-## Verification
-- Before considering a change complete, verify build/lint results, dependencies, resources, release configuration and relevant runtime behavior.
+### Platform behavior
+- Permissions: https://developer.android.com/guide/topics/permissions/overview
+- Package visibility: https://developer.android.com/training/package-visibility
+- Background tasks: https://developer.android.com/develop/background-work/background-tasks
+- Per-app language preferences: https://developer.android.com/guide/topics/resources/app-languages
+- Predictive back gesture: https://developer.android.com/guide/navigation/custom-back/predictive-back-gesture
+- Kotlin coroutines on Android: https://developer.android.com/kotlin/coroutines
+
+### Architecture, quality and testing
+- Guide to app architecture: https://developer.android.com/topic/architecture
+- Core app quality guidelines: https://developer.android.com/docs/quality-guidelines/core-app-quality
+- Compose performance: https://developer.android.com/develop/ui/compose/performance
+- Baseline Profiles: https://developer.android.com/topic/performance/baselineprofiles/overview
+- Test apps on Android: https://developer.android.com/training/testing
+
+### Build and release
+- Configure your build: https://developer.android.com/build
+- Version catalogs: https://developer.android.com/build/migrate-to-catalogs
+- App optimization with R8: https://developer.android.com/topic/performance/app-optimization/enable-app-optimization
+- Sign your app: https://developer.android.com/studio/publish/app-signing
+- Android releases: https://developer.android.com/about/versions
+- Compose UI release notes: https://developer.android.com/jetpack/androidx/releases/compose-ui
