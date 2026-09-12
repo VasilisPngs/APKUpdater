@@ -1,4 +1,4 @@
-package com.android.apkupdater.data.api
+package com.android.gupdater.data.api
 
 import okhttp3.OkHttpClient
 import java.util.concurrent.TimeUnit

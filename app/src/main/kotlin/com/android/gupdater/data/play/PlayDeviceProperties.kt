@@ -1,4 +1,4 @@
-package com.android.apkupdater.data.play
+package com.android.gupdater.data.play
 
 import android.app.ActivityManager
 import android.content.Context

@@ -1,4 +1,4 @@
-package com.android.apkupdater.data.installer
+package com.android.gupdater.data.installer
 
 import android.app.PendingIntent
 import android.content.BroadcastReceiver

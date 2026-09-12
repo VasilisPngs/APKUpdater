@@ -1,4 +1,4 @@
-package com.android.apkupdater.data.model
+package com.android.gupdater.data.model
 
 data class InstalledApp(
     val packageName: String,
@@ -15,6 +15,7 @@ data class AppUpdateInfo(
     val newVersionName: String,
     val newVersionCode: Long,
     val publishedAt: Long?,
+    val playAvailable: Boolean,
     val playVersionCode: Long?,
     val apkMirrorUrl: String?
 )

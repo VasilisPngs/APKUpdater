@@ -1,4 +1,4 @@
-package com.android.apkupdater.ui
+package com.android.gupdater.ui
 
 import android.content.Context
 import android.content.Intent
@@ -74,11 +74,11 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.android.apkupdater.R
-import com.android.apkupdater.data.model.AppUpdateInfo
-import com.android.apkupdater.data.model.InstallState
-import com.android.apkupdater.data.model.InstalledApp
-import com.android.apkupdater.data.repository.ScanStatus
+import com.android.gupdater.R
+import com.android.gupdater.data.model.AppUpdateInfo
+import com.android.gupdater.data.model.InstallState
+import com.android.gupdater.data.model.InstalledApp
+import com.android.gupdater.data.repository.ScanStatus
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -92,8 +92,8 @@ private enum class AppTab(val labelRes: Int) {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ApkUpdaterScreen(
-    viewModel: ApkUpdaterViewModel,
+fun GUpdaterScreen(
+    viewModel: GUpdaterViewModel,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -390,8 +390,10 @@ private fun AppListItem(
                 horizontalArrangement = Arrangement.End,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                if (update.playVersionCode != null) {
-                    FilledTonalButton(onClick = { onPlayStoreUpdate(update.playVersionCode) }) {
+                if (update.playAvailable) {
+                    FilledTonalButton(
+                        onClick = { onPlayStoreUpdate(update.playVersionCode ?: update.newVersionCode) }
+                    ) {
                         Box(contentAlignment = Alignment.Center) {
                             Text(
                                 text = stringResource(R.string.play_store),

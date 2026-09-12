@@ -1,12 +1,12 @@
-package com.android.apkupdater.data.installer
+package com.android.gupdater.data.installer
 
 import android.content.Context
 import android.content.pm.PackageManager
 import android.util.Base64
-import com.android.apkupdater.data.api.SharedHttpClient
-import com.android.apkupdater.data.model.InstallState
-import com.android.apkupdater.data.model.InstalledApp
-import com.android.apkupdater.data.play.PlayAuthProvider
+import com.android.gupdater.data.api.SharedHttpClient
+import com.android.gupdater.data.model.InstallState
+import com.android.gupdater.data.model.InstalledApp
+import com.android.gupdater.data.play.PlayAuthProvider
 import com.aurora.gplayapi.data.models.App
 import com.aurora.gplayapi.data.models.AuthData
 import com.aurora.gplayapi.data.models.PlayFile

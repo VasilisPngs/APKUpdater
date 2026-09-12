@@ -1,10 +1,10 @@
-package com.android.apkupdater.data.installer
+package com.android.gupdater.data.installer
 
 import android.content.Context
 import android.net.Uri
 import android.os.Build
 import android.provider.OpenableColumns
-import com.android.apkupdater.data.model.InstallState
+import com.android.gupdater.data.model.InstallState
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext

@@ -1,4 +1,4 @@
-package com.android.apkupdater.data.model
+package com.android.gupdater.data.model
 
 data class ApkMirrorApp(
     val packageName: String,

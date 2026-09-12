@@ -1,8 +1,8 @@
-package com.android.apkupdater.data.play
+package com.android.gupdater.data.play
 
 import com.aurora.gplayapi.helpers.AppDetailsHelper
 
-data class PlayApp(val versionCode: Long, val versionName: String)
+data class PlayApp(val versionCode: Long, val versionName: String, val developerName: String)
 
 class PlayCatalog(private val authProvider: PlayAuthProvider) {
 
@@ -11,6 +11,8 @@ class PlayCatalog(private val authProvider: PlayAuthProvider) {
 
         return AppDetailsHelper(authProvider.session())
             .getAppByPackageName(packageNames)
-            .associate { it.packageName to PlayApp(it.versionCode, it.versionName) }
+            .associate {
+                it.packageName to PlayApp(it.versionCode, it.versionName, it.developerName)
+            }
     }
 }

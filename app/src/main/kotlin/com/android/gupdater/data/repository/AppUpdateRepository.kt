@@ -1,4 +1,4 @@
-package com.android.apkupdater.data.repository
+package com.android.gupdater.data.repository
 
 import android.content.Context
 import android.content.pm.PackageInfo
@@ -6,13 +6,13 @@ import android.content.pm.PackageManager
 import android.content.pm.Signature
 import android.content.pm.SigningInfo
 import android.os.Build
-import com.android.apkupdater.data.api.ApkMirrorClient
-import com.android.apkupdater.data.model.ApkMirrorApk
-import com.android.apkupdater.data.model.ApkMirrorApp
-import com.android.apkupdater.data.model.AppUpdateInfo
-import com.android.apkupdater.data.model.InstalledApp
-import com.android.apkupdater.data.play.PlayApp
-import com.android.apkupdater.data.play.PlayCatalog
+import com.android.gupdater.data.api.ApkMirrorClient
+import com.android.gupdater.data.model.ApkMirrorApk
+import com.android.gupdater.data.model.ApkMirrorApp
+import com.android.gupdater.data.model.AppUpdateInfo
+import com.android.gupdater.data.model.InstalledApp
+import com.android.gupdater.data.play.PlayApp
+import com.android.gupdater.data.play.PlayCatalog
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
@@ -73,7 +73,7 @@ class AppUpdateRepository(
         val results: List<Result<List<AppUpdateInfo>>>
 
         coroutineScope {
-            val playDetails = async { playUpdates(appsToCheck) }
+            val details = async { playDetails(appsToCheck) }
             results = batches.map { batch ->
                 async {
                     try {
@@ -86,12 +86,13 @@ class AppUpdateRepository(
                     }
                 }
             }.awaitAll()
-            play = playDetails.await()
+            play = details.await()
         }
 
         val updates = merge(
             results.mapNotNull(Result<List<AppUpdateInfo>>::getOrNull).flatten(),
-            play.orEmpty()
+            play.orEmpty(),
+            appsToCheck
         )
         val failedBatches = results.count(Result<List<AppUpdateInfo>>::isFailure)
         val failures = buildList {
@@ -109,26 +110,30 @@ class AppUpdateRepository(
         }
     }.flowOn(Dispatchers.IO)
 
-    private fun playUpdates(apps: List<InstalledApp>): Map<String, PlayApp>? {
-        val details = runCatching { playCatalog.details(apps.map(InstalledApp::packageName)) }
+    private fun playDetails(apps: List<InstalledApp>): Map<String, PlayApp>? =
+        runCatching { playCatalog.details(apps.map(InstalledApp::packageName)) }
             .getOrNull()
-            ?: return null
-        val installedVersions = apps.associate { it.packageName to it.versionCode }
-
-        return details.filter { (packageName, playApp) ->
-            playApp.versionCode > (installedVersions[packageName] ?: Long.MAX_VALUE)
-        }
-    }
+            ?.filter { (packageName, playApp) -> isGoogleApp(packageName, playApp.developerName) }
 
     private fun merge(
         apkMirrorUpdates: List<AppUpdateInfo>,
-        playUpdates: Map<String, PlayApp>
+        playApps: Map<String, PlayApp>,
+        installedApps: List<InstalledApp>
     ): List<AppUpdateInfo> {
+        val installedVersions = installedApps.associate { it.packageName to it.versionCode }
         val byPackage = LinkedHashMap<String, AppUpdateInfo>()
-        apkMirrorUpdates.forEach { byPackage[it.packageName] = it }
 
-        playUpdates.forEach { (packageName, playApp) ->
-            if (!isStableRelease(playApp.versionName)) return@forEach
+        apkMirrorUpdates.forEach { update ->
+            byPackage[update.packageName] = update.copy(
+                playAvailable = playApps.containsKey(update.packageName)
+            )
+        }
+
+        playApps.forEach { (packageName, playApp) ->
+            val installedVersion = installedVersions[packageName] ?: return@forEach
+            if (playApp.versionCode <= installedVersion) return@forEach
+            if (!isStableRelease(packageName) || !isStableRelease(playApp.versionName)) return@forEach
+
             val update = byPackage[packageName]
             byPackage[packageName] = update?.copy(
                 newVersionName = playApp.versionName.ifBlank { update.newVersionName },
@@ -140,6 +145,7 @@ class AppUpdateRepository(
                 newVersionName = playApp.versionName,
                 newVersionCode = playApp.versionCode,
                 publishedAt = null,
+                playAvailable = true,
                 playVersionCode = playApp.versionCode,
                 apkMirrorUrl = null
             )
@@ -147,6 +153,10 @@ class AppUpdateRepository(
 
         return byPackage.values.sortedWith(NEWEST_FIRST)
     }
+
+    private fun isGoogleApp(packageName: String, developerName: String): Boolean =
+        developerName.startsWith(GOOGLE_DEVELOPER, ignoreCase = true) ||
+            GOOGLE_PACKAGE_PREFIXES.any(packageName::startsWith)
 
     private fun parseUpdates(
         apps: List<ApkMirrorApp>,
@@ -156,9 +166,12 @@ class AppUpdateRepository(
 
         return apps.mapNotNull { app ->
             val installed = installedByPackage[app.packageName] ?: return@mapNotNull null
+            if (!isStableRelease(app.packageName)) return@mapNotNull null
             if (!isStableRelease(app.versionName)) return@mapNotNull null
 
             val apk = bestApk(app.apks, installed) ?: return@mapNotNull null
+            val url = apk.link.toAbsoluteApkMirrorUrl()
+            if (!url.startsWith(GOOGLE_APKMIRROR_PREFIX)) return@mapNotNull null
 
             AppUpdateInfo(
                 packageName = installed.packageName,
@@ -166,8 +179,9 @@ class AppUpdateRepository(
                 newVersionName = app.versionName,
                 newVersionCode = apk.versionCode,
                 publishedAt = publishedAt(apk.publishDate.ifBlank { app.publishDate }),
+                playAvailable = false,
                 playVersionCode = null,
-                apkMirrorUrl = apk.link.toAbsoluteApkMirrorUrl()
+                apkMirrorUrl = url
             )
         }
     }
@@ -176,7 +190,7 @@ class AppUpdateRepository(
         .asSequence()
         .filter { it.versionCode > installed.versionCode }
         .filter { it.minimumApi <= Build.VERSION.SDK_INT }
-        .filter { isStableRelease(it.link) }
+        .filter { isStableLink(it.link) }
         .filter(::matchesFormFactor)
         .filter { matchesSignature(it, installed) }
         .filter { abiRank(it) != UNSUPPORTED_ABI }
@@ -259,6 +273,12 @@ class AppUpdateRepository(
         return null
     }
 
+    private fun isStableLink(link: String): Boolean = link
+        .substringAfter(APKMIRROR_PATH_PREFIX, "")
+        .split('/')
+        .drop(1)
+        .all(::isStableRelease)
+
     private fun isStableRelease(value: String): Boolean =
         value.isBlank() || !PRE_RELEASE_MARKER_PATTERN.containsMatchIn(value)
 
@@ -299,6 +319,9 @@ class AppUpdateRepository(
 
     private companion object {
         const val API_BATCH_SIZE = 100
+        const val APKMIRROR_PATH_PREFIX = "/apk/"
+        const val GOOGLE_APKMIRROR_PREFIX = "https://www.apkmirror.com/apk/google-inc/"
+        const val GOOGLE_DEVELOPER = "Google"
         val NEWEST_FIRST = compareByDescending<AppUpdateInfo> { it.publishedAt ?: Long.MIN_VALUE }
             .thenBy { it.appName.lowercase(Locale.ROOT) }
         val PUBLISH_DATE_FORMATS = listOf(
@@ -316,6 +339,7 @@ class AppUpdateRepository(
         val PACKAGE_FLAGS: PackageManager.PackageInfoFlags = PackageManager.PackageInfoFlags.of(
             (PackageManager.GET_SIGNING_CERTIFICATES or PackageManager.MATCH_DISABLED_COMPONENTS).toLong()
         )
+        val GOOGLE_PACKAGE_PREFIXES = listOf("com.google.", "com.android.")
         val UNIVERSAL_ARCHITECTURES = setOf("universal", "noarch")
         val UNIVERSAL_DENSITIES = setOf("nodpi", "anydpi", "universal")
         val DENSITY_BUCKETS = listOf(120, 160, 213, 240, 320, 480, 640)
