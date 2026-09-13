@@ -3,7 +3,7 @@ package com.android.gupdater.ui
 import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
-import android.graphics.Canvas
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
@@ -13,6 +13,8 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.calculateEndPadding
+import androidx.compose.foundation.layout.calculateStartPadding
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -25,6 +27,8 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.BottomAppBar
 import androidx.compose.material3.BottomAppBarDefaults
+import androidx.compose.material3.Card
+import androidx.compose.material3.Card
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
@@ -33,7 +37,6 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.Card
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
@@ -64,11 +67,12 @@ import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.core.graphics.createBitmap
+import androidx.core.graphics.drawable.toBitmap
 import androidx.core.net.toUri
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.android.gupdater.R
@@ -103,6 +107,8 @@ fun GUpdaterScreen(
         uri?.let(viewModel::installBundle)
     }
     val bottomBarScrollBehavior = BottomAppBarDefaults.exitAlwaysScrollBehavior()
+
+    BackHandler(enabled = selectedTab != AppTab.Home) { selectedTab = AppTab.Home }
 
     val installedFormat = stringResource(R.string.update_installed)
     val failedFormat = stringResource(R.string.update_failed)
@@ -232,6 +238,7 @@ private fun HomeContent(
     onScan: () -> Unit,
     onPlayStoreUpdate: (InstalledApp, Long) -> Unit
 ) {
+    val layoutDirection = LocalLayoutDirection.current
     val fileInstalls = remember(installs, updates) {
         installs.filterKeys { key -> updates.none { (app, _) -> app.packageName == key } }.values.toList()
     }
@@ -239,7 +246,11 @@ private fun HomeContent(
     PullToRefreshBox(
         isRefreshing = isScanning,
         onRefresh = onScan,
-        modifier = modifier.padding(top = contentPadding.calculateTopPadding())
+        modifier = modifier.padding(
+            start = contentPadding.calculateStartPadding(layoutDirection),
+            top = contentPadding.calculateTopPadding(),
+            end = contentPadding.calculateEndPadding(layoutDirection)
+        )
     ) {
         Column(modifier = Modifier.fillMaxSize()) {
             fileInstalls.forEach { state ->
@@ -306,7 +317,8 @@ private fun AppListItem(
     val iconBitmap by produceState<Bitmap?>(initialValue = null, key1 = app.packageName) {
         value = withContext(Dispatchers.IO) {
             runCatching {
-                context.packageManager.getApplicationIcon(app.packageName).toBitmap(iconSizePx)
+                context.packageManager.getApplicationIcon(app.packageName)
+                    .toBitmap(iconSizePx, iconSizePx)
             }.getOrNull()
         }
     }
@@ -317,7 +329,7 @@ private fun AppListItem(
                 if (iconBitmap != null) {
                     Image(
                         bitmap = iconBitmap!!.asImageBitmap(),
-                        contentDescription = update.appName,
+                        contentDescription = null,
                         modifier = Modifier.size(APP_ICON_SIZE),
                         contentScale = ContentScale.Fit
                     )
@@ -392,14 +404,6 @@ private fun AppListItem(
         }
     }
 }
-
-private fun android.graphics.drawable.Drawable.toBitmap(sizePx: Int): Bitmap =
-    createBitmap(sizePx, sizePx).also { bitmap ->
-        Canvas(bitmap).also { canvas ->
-            setBounds(0, 0, sizePx, sizePx)
-            draw(canvas)
-        }
-    }
 
 @Composable
 private fun SettingsContent(
