@@ -247,7 +247,7 @@ private fun ScanStatusLine(isScanning: Boolean, found: Int) {
             .fillMaxWidth()
             .background(BottomAppBarDefaults.containerColor)
             .padding(horizontal = 16.dp, vertical = 12.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
+        horizontalArrangement = Arrangement.spacedBy(ButtonDefaults.IconSpacing),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Text(
