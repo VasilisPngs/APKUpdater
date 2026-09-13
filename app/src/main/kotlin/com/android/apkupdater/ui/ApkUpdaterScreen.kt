@@ -270,10 +270,10 @@ private fun ScanStatusLine(isScanning: Boolean, found: Int) {
         verticalAlignment = Alignment.CenterVertically
     ) {
         Text(
-            text = if (isScanning) {
-                stringResource(R.string.checking_for_updates)
-            } else {
-                pluralStringResource(R.plurals.updates_found, found, found)
+            text = when {
+                isScanning -> stringResource(R.string.checking_for_updates)
+                found == 0 -> stringResource(R.string.all_up_to_date)
+                else -> pluralStringResource(R.plurals.updates_found, found, found)
             },
             style = MaterialTheme.typography.bodyLarge,
             color = MaterialTheme.colorScheme.onSurface
