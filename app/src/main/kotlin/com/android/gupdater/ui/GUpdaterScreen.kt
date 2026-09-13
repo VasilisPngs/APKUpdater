@@ -27,7 +27,6 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Home
 import androidx.compose.material.icons.rounded.MoreVert
-import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material3.BottomAppBar
 import androidx.compose.material3.BottomAppBarDefaults
@@ -51,7 +50,7 @@ import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -70,7 +69,6 @@ import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -125,6 +123,11 @@ fun GUpdaterScreen(
         }
     }
 
+    LaunchedEffect(uiState.scanStatus) {
+        val status = uiState.scanStatus
+        if (status is ScanStatus.Error) snackbarHostState.showSnackbar(status.message)
+    }
+
     val updateMap = remember(uiState.updates) {
         uiState.updates.associateBy(AppUpdateInfo::packageName)
     }
@@ -139,9 +142,6 @@ fun GUpdaterScreen(
             .nestedScroll(bottomBarScrollBehavior.nestedScrollConnection),
         topBar = {
             CenterAlignedTopAppBar(
-                colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
-                    containerColor = BottomAppBarDefaults.containerColor
-                ),
                 title = { Text(stringResource(R.string.app_name)) },
                 actions = {
                     IconButton(onClick = { menuExpanded = true }) {
@@ -205,12 +205,12 @@ fun GUpdaterScreen(
             AppTab.Home -> HomeContent(
                 modifier = Modifier.fillMaxSize(),
                 contentPadding = innerPadding,
-                status = uiState.scanStatus,
+                isScanning = uiState.scanStatus == ScanStatus.Scanning,
                 apps = appsWithUpdates,
                 updateMap = updateMap,
                 listState = homeListState,
                 installs = uiState.installs,
-                onScanClick = viewModel::scanForUpdates,
+                onScan = viewModel::scanForUpdates,
                 onPlayStoreUpdate = { app, versionCode -> viewModel.installFromPlay(app, versionCode) }
             )
             AppTab.Settings -> SettingsContent(
@@ -226,93 +226,61 @@ fun GUpdaterScreen(
 private fun HomeContent(
     modifier: Modifier,
     contentPadding: PaddingValues,
-    status: ScanStatus,
+    isScanning: Boolean,
     apps: List<InstalledApp>,
     updateMap: Map<String, AppUpdateInfo>,
     listState: LazyListState,
     installs: Map<String, InstallState>,
-    onScanClick: () -> Unit,
+    onScan: () -> Unit,
     onPlayStoreUpdate: (InstalledApp, Long) -> Unit
 ) {
     val fileInstalls = remember(installs, apps) {
         installs.filterKeys { key -> apps.none { it.packageName == key } }.values.toList()
     }
 
-    Column(modifier = modifier.padding(top = contentPadding.calculateTopPadding())) {
-        Box(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
-            ListItem(
-                colors = ListItemDefaults.colors(containerColor = Color.Transparent),
-                headlineContent = {
-                    Text(
-                        when (status) {
-                            ScanStatus.Scanning -> stringResource(R.string.searching_for_updates)
-                            is ScanStatus.Success -> if (apps.isNotEmpty()) {
-                                pluralStringResource(R.plurals.updates_available, apps.size, apps.size)
-                            } else {
-                                stringResource(R.string.all_apps_up_to_date)
+    PullToRefreshBox(
+        isRefreshing = isScanning,
+        onRefresh = onScan,
+        modifier = modifier.padding(top = contentPadding.calculateTopPadding())
+    ) {
+        Column(modifier = Modifier.fillMaxSize()) {
+            fileInstalls.forEach { state ->
+                RoundedSection {
+                    ListItem(
+                        colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+                        headlineContent = {
+                            Text(state.appName, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        },
+                        trailingContent = {
+                            Box(modifier = Modifier.size(48.dp), contentAlignment = Alignment.Center) {
+                                CircularProgressIndicator(modifier = Modifier.size(24.dp))
                             }
-                            is ScanStatus.Error -> stringResource(R.string.update_check_failed)
                         }
                     )
-                },
-                supportingContent = if (status is ScanStatus.Error) {
-                    { Text(status.message) }
-                } else {
-                    null
-                },
-                trailingContent = {
-                    if (status == ScanStatus.Scanning) {
-                        Box(modifier = Modifier.size(48.dp), contentAlignment = Alignment.Center) {
-                            CircularProgressIndicator(modifier = Modifier.size(24.dp))
-                        }
-                    } else {
-                        IconButton(onClick = onScanClick) {
-                            Icon(
-                                imageVector = Icons.Rounded.Refresh,
-                                contentDescription = stringResource(R.string.check_again)
-                            )
-                        }
-                    }
                 }
-            )
-        }
-
-        fileInstalls.forEach { state ->
-            RoundedSection {
-                ListItem(
-                    colors = ListItemDefaults.colors(containerColor = Color.Transparent),
-                    headlineContent = {
-                        Text(state.appName, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    },
-                    trailingContent = {
-                        Box(modifier = Modifier.size(48.dp), contentAlignment = Alignment.Center) {
-                            CircularProgressIndicator(modifier = Modifier.size(24.dp))
-                        }
-                    }
-                )
             }
-        }
 
-        LazyColumn(
-            state = listState,
-            modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(
-                start = 16.dp,
-                top = 16.dp,
-                end = 16.dp,
-                bottom = contentPadding.calculateBottomPadding() + 16.dp
-            ),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            items(apps, key = { it.packageName }) { app ->
-                updateMap[app.packageName]?.let { update ->
-                    AppListItem(
-                        modifier = Modifier.animateItem(),
-                        app = app,
-                        update = update,
-                        installState = installs[app.packageName],
-                        onPlayStoreUpdate = { versionCode -> onPlayStoreUpdate(app, versionCode) }
-                    )
+            LazyColumn(
+                state = listState,
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(
+                    start = 16.dp,
+                    top = 16.dp,
+                    end = 16.dp,
+                    bottom = contentPadding.calculateBottomPadding() + 16.dp
+                ),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                items(apps, key = { it.packageName }) { app ->
+                    updateMap[app.packageName]?.let { update ->
+                        AppListItem(
+                            modifier = Modifier.animateItem(),
+                            app = app,
+                            update = update,
+                            installState = installs[app.packageName],
+                            onPlayStoreUpdate = { versionCode -> onPlayStoreUpdate(app, versionCode) }
+                        )
+                    }
                 }
             }
         }
