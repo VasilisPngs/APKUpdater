@@ -74,6 +74,7 @@ jobs:
             gh api --method PATCH "repos/$REPO/git/refs/tags/$TAG_NAME" \
               -f sha="$GITHUB_SHA" -F force=true --silent \
               || echo "::warning::The tag still points at an older commit."
+            gh release edit "$TAG_NAME" --repo "$REPO" --notes " " >/dev/null
             gh release edit "$TAG_NAME" --repo "$REPO" --draft >/dev/null
             for attempt in 1 2 3; do
               gh release edit "$TAG_NAME" --repo "$REPO" --draft=false >/dev/null && break || sleep 5
