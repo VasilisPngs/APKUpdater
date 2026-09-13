@@ -17,7 +17,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.calculateEndPadding
 import androidx.compose.foundation.layout.calculateStartPadding
 import androidx.compose.foundation.layout.fillMaxSize
@@ -26,18 +25,16 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.BottomAppBar
 import androidx.compose.material3.BottomAppBarDefaults
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
-import androidx.compose.material3.CardColors
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
@@ -56,7 +53,6 @@ import androidx.compose.material3.Snackbar
 import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -77,8 +73,8 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.ClipEntry
 import androidx.compose.ui.platform.LocalClipboard
 import androidx.compose.ui.platform.LocalContext
@@ -90,7 +86,6 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.core.graphics.drawable.toBitmap
 import androidx.core.net.toUri
@@ -107,7 +102,6 @@ import java.text.NumberFormat
 
 private val APP_ICON_SIZE = 56.dp
 private const val MAX_VERSION_CODE_DIGITS = 19
-private val ISLAND_GAP = 12.dp
 
 private enum class AppTab(val labelRes: Int, val iconRes: Int, val selectedIconRes: Int) {
     Home(R.string.home, R.drawable.ic_home, R.drawable.ic_home_filled),
@@ -124,13 +118,13 @@ fun ApkUpdaterScreen(
     var selectedTab by rememberSaveable { mutableStateOf(AppTab.Home) }
     var menuExpanded by remember { mutableStateOf(false) }
     val homeListState = rememberLazyListState()
-    val density = LocalDensity.current
-    var navIslandHeight by remember { mutableStateOf(0.dp) }
     val coroutineScope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
     val bundlePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         uri?.let(viewModel::installBundle)
     }
+    val bottomBarScrollBehavior = BottomAppBarDefaults.exitAlwaysScrollBehavior()
+
     BackHandler(enabled = selectedTab != AppTab.Home) { selectedTab = AppTab.Home }
 
     val installedFormat = stringResource(R.string.update_installed)
@@ -164,10 +158,14 @@ fun ApkUpdaterScreen(
     }
 
     Scaffold(
-        modifier = modifier.fillMaxSize(),
+        modifier = modifier
+            .fillMaxSize()
+            .nestedScroll(bottomBarScrollBehavior.nestedScrollConnection),
         topBar = {
             CenterAlignedTopAppBar(
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent),
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = BottomAppBarDefaults.containerColor
+                ),
                 title = { Text(stringResource(R.string.app_name)) },
                 actions = {
                     IconButton(onClick = { menuExpanded = true }) {
@@ -193,39 +191,32 @@ fun ApkUpdaterScreen(
             )
         },
         bottomBar = {
-            Surface(
-                modifier = Modifier
-                    .windowInsetsPadding(BottomAppBarDefaults.windowInsets)
-                    .padding(start = 16.dp, end = 16.dp, bottom = ISLAND_GAP)
-                    .fillMaxWidth()
-                    .onSizeChanged { navIslandHeight = with(density) { it.height.toDp() } },
-                shape = MaterialTheme.shapes.extraLarge,
-                color = MaterialTheme.colorScheme.surfaceContainerHigh
+            BottomAppBar(
+                scrollBehavior = bottomBarScrollBehavior,
+                contentPadding = PaddingValues(0.dp)
             ) {
-                Row {
-                    AppTab.entries.forEach { tab ->
-                        val selected = selectedTab == tab
-                        NavigationBarItem(
-                            selected = selected,
-                            onClick = {
-                                when {
-                                    !selected -> selectedTab = tab
-                                    tab == AppTab.Home && homeListState.canScrollBackward ->
-                                        coroutineScope.launch { homeListState.animateScrollToItem(0) }
-                                    else -> Unit
-                                }
-                            },
-                            icon = {
-                                Icon(
-                                    painter = painterResource(
-                                        if (selected) tab.selectedIconRes else tab.iconRes
-                                    ),
-                                    contentDescription = stringResource(tab.labelRes)
-                                )
-                            },
-                            label = { Text(stringResource(tab.labelRes)) }
-                        )
-                    }
+                AppTab.entries.forEach { tab ->
+                    val selected = selectedTab == tab
+                    NavigationBarItem(
+                        selected = selected,
+                        onClick = {
+                            when {
+                                !selected -> selectedTab = tab
+                                tab == AppTab.Home && homeListState.canScrollBackward ->
+                                    coroutineScope.launch { homeListState.animateScrollToItem(0) }
+                                else -> Unit
+                            }
+                        },
+                        icon = {
+                            Icon(
+                                painter = painterResource(
+                                    if (selected) tab.selectedIconRes else tab.iconRes
+                                ),
+                                contentDescription = stringResource(tab.labelRes)
+                            )
+                        },
+                        label = { Text(stringResource(tab.labelRes)) }
+                    )
                 }
             }
         },
@@ -245,8 +236,7 @@ fun ApkUpdaterScreen(
                     listState = homeListState,
                     installs = uiState.installs,
                     onScan = viewModel::scanForUpdates,
-                    onManualUpdate = viewModel::installVersion,
-                    navIslandHeight = navIslandHeight
+                    onManualUpdate = viewModel::installVersion
                 )
                 AppTab.Settings -> SettingsContent(
                     modifier = Modifier.fillMaxSize().padding(innerPadding),
@@ -259,33 +249,26 @@ fun ApkUpdaterScreen(
 }
 
 @Composable
-private fun cardColors(): CardColors =
-    CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer)
-
-@Composable
-private fun ScanStatusLine(modifier: Modifier, isScanning: Boolean, found: Int) {
-    Surface(
-        modifier = modifier.fillMaxWidth().padding(horizontal = 16.dp),
-        shape = MaterialTheme.shapes.extraLarge,
-        color = MaterialTheme.colorScheme.surfaceContainerHigh
+private fun ScanStatusLine(isScanning: Boolean, found: Int) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(BottomAppBarDefaults.containerColor)
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                text = when {
-                    isScanning -> stringResource(R.string.checking_for_updates)
-                    found == 0 -> stringResource(R.string.all_up_to_date)
-                    else -> pluralStringResource(R.plurals.updates_found, found, found)
-                },
-                style = MaterialTheme.typography.bodyLarge,
-                color = MaterialTheme.colorScheme.onSurface
-            )
-            if (isScanning) {
-                CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
-            }
+        Text(
+            text = when {
+                isScanning -> stringResource(R.string.checking_for_updates)
+                found == 0 -> stringResource(R.string.all_up_to_date)
+                else -> pluralStringResource(R.plurals.updates_found, found, found)
+            },
+            style = MaterialTheme.typography.bodyLarge,
+            color = MaterialTheme.colorScheme.onSurface
+        )
+        if (isScanning) {
+            CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
         }
     }
 }
@@ -299,57 +282,52 @@ private fun HomeContent(
     listState: LazyListState,
     installs: Map<String, InstallState>,
     onScan: () -> Unit,
-    onManualUpdate: (InstalledApp, Long) -> Unit,
-    navIslandHeight: Dp
+    onManualUpdate: (InstalledApp, Long) -> Unit
 ) {
-    val density = LocalDensity.current
     val layoutDirection = LocalLayoutDirection.current
-    val bottomInset = BottomAppBarDefaults.windowInsets.asPaddingValues().calculateBottomPadding()
-    var statusHeight by remember { mutableStateOf(0.dp) }
     val fileInstalls = remember(installs, updates) {
         installs.filterKeys { key -> updates.none { (app, _) -> app.packageName == key } }.values.toList()
     }
 
-    Box(
+    PullToRefreshBox(
+        isRefreshing = false,
+        onRefresh = onScan,
         modifier = modifier.padding(
             start = contentPadding.calculateStartPadding(layoutDirection),
-            top = contentPadding.calculateTopPadding() + ISLAND_GAP,
-            end = contentPadding.calculateEndPadding(layoutDirection),
-            bottom = bottomInset + ISLAND_GAP
+            top = contentPadding.calculateTopPadding(),
+            end = contentPadding.calculateEndPadding(layoutDirection)
         )
     ) {
-        PullToRefreshBox(isRefreshing = false, onRefresh = onScan) {
+        Column(modifier = Modifier.fillMaxSize()) {
+            ScanStatusLine(isScanning = isScanning, found = updates.size)
+
+            fileInstalls.forEach { state ->
+                RoundedSection {
+                    ListItem(
+                        colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+                        headlineContent = {
+                            Text(state.appName, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        },
+                        trailingContent = {
+                            Box(modifier = Modifier.size(48.dp), contentAlignment = Alignment.Center) {
+                                CircularProgressIndicator(modifier = Modifier.size(24.dp))
+                            }
+                        }
+                    )
+                }
+            }
+
             LazyColumn(
                 state = listState,
                 modifier = Modifier.fillMaxSize(),
                 contentPadding = PaddingValues(
                     start = 16.dp,
-                    top = statusHeight + ISLAND_GAP,
+                    top = 16.dp,
                     end = 16.dp,
-                    bottom = navIslandHeight + ISLAND_GAP
+                    bottom = contentPadding.calculateBottomPadding() + 16.dp
                 ),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                items(fileInstalls, key = InstallState::appName) { state ->
-                    Card(
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = MaterialTheme.shapes.extraLarge,
-                        colors = cardColors()
-                    ) {
-                        ListItem(
-                            colors = ListItemDefaults.colors(containerColor = Color.Transparent),
-                            headlineContent = {
-                                Text(state.appName, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                            },
-                            trailingContent = {
-                                Box(modifier = Modifier.size(48.dp), contentAlignment = Alignment.Center) {
-                                    CircularProgressIndicator(modifier = Modifier.size(24.dp))
-                                }
-                            }
-                        )
-                    }
-                }
-
                 items(updates, key = { (app, _) -> app.packageName }) { (app, update) ->
                     AppListItem(
                         modifier = Modifier.animateItem(),
@@ -361,14 +339,6 @@ private fun HomeContent(
                 }
             }
         }
-
-        ScanStatusLine(
-            modifier = Modifier.onSizeChanged {
-                statusHeight = with(density) { it.height.toDp() }
-            },
-            isScanning = isScanning,
-            found = updates.size
-        )
     }
 }
 
@@ -376,8 +346,7 @@ private fun HomeContent(
 private fun RoundedSection(content: @Composable () -> Unit) {
     Card(
         modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
-        shape = MaterialTheme.shapes.extraLarge,
-        colors = cardColors()
+        shape = MaterialTheme.shapes.extraLarge
     ) {
         content()
     }
@@ -407,11 +376,7 @@ private fun AppListItem(
         }
     }
 
-    Card(
-        modifier = modifier.fillMaxWidth(),
-        shape = MaterialTheme.shapes.extraLarge,
-        colors = cardColors()
-    ) {
+    Card(modifier = modifier.fillMaxWidth(), shape = MaterialTheme.shapes.extraLarge) {
         Column(modifier = Modifier.fillMaxWidth().padding(20.dp)) {
             Row(verticalAlignment = Alignment.Top) {
                 if (iconBitmap != null) {
