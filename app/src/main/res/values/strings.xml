@@ -6,6 +6,8 @@
     <string name="manual">Manual</string>
     <string name="update_with_version_code">Update with versioncode</string>
     <string name="version_code">Version code</string>
+    <string name="ok">OK</string>
+    <string name="cancel">Cancel</string>
     <string name="copy_version_code">Copy version code</string>
     <string name="disabled_apps">Disabled apps</string>
     <string name="disabled_apps_description">Include disabled applications when checking for updates</string>

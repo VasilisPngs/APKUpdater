@@ -481,7 +481,8 @@ private fun ManualVersionDialog(onDismiss: () -> Unit, onConfirm: (Long) -> Unit
                     input = text.filter(Char::isDigit).take(MAX_VERSION_CODE_DIGITS)
                 },
                 modifier = Modifier.focusRequester(focusRequester),
-                label = { Text(stringResource(R.string.version_code)) },
+                placeholder = { Text(stringResource(R.string.version_code)) },
+                shape = MaterialTheme.shapes.extraLarge,
                 singleLine = true,
                 keyboardOptions = KeyboardOptions(
                     keyboardType = KeyboardType.Number,
@@ -491,11 +492,11 @@ private fun ManualVersionDialog(onDismiss: () -> Unit, onConfirm: (Long) -> Unit
         },
         confirmButton = {
             TextButton(enabled = versionCode != null, onClick = { versionCode?.let(onConfirm) }) {
-                Text(stringResource(android.R.string.ok))
+                Text(stringResource(R.string.ok))
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text(stringResource(android.R.string.cancel)) }
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) }
         }
     )
 }
