@@ -376,6 +376,10 @@ private fun AppListItem(
                         ),
                         style = MaterialTheme.typography.bodyLarge
                     )
+                    Text(
+                        text = update.diagnostics,
+                        style = MaterialTheme.typography.bodySmall
+                    )
                 }
             }
             Spacer(Modifier.height(16.dp))

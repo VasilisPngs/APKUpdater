@@ -113,6 +113,7 @@ class AppUpdateRepository(
                 appName = packageManager.appLabel(installed.packageName),
                 newVersionName = fullVersionName(apk, app.versionName),
                 newVersionCode = apk.versionCode,
+                diagnostics = diagnostics(app, apk),
                 publishedAt = publishedAt(apk.publishDate.ifBlank { app.publishDate }),
                 apkMirrorUrl = apk.link.toAbsoluteApkMirrorUrl()
             )
@@ -137,6 +138,13 @@ class AppUpdateRepository(
                     .thenByDescending(ApkMirrorApk::minimumApi)
                     .thenByDescending(ApkMirrorApk::versionCode)
             )
+    }
+
+    private fun diagnostics(app: ApkMirrorApp, apk: ApkMirrorApk): String {
+        val tagged = app.apks.count { it.capabilities.isNotEmpty() }
+        val allCapabilities = app.apks.flatMap(ApkMirrorApk::capabilities).distinct()
+        return "n=${app.apks.size} tagged=$tagged all=$allCapabilities " +
+            "caps=${apk.capabilities} desc=\"${apk.description}\""
     }
 
     private fun fullVersionName(apk: ApkMirrorApk, releaseVersion: String): String {
