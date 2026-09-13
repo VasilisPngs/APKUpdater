@@ -71,6 +71,9 @@ jobs:
           cp app/build/outputs/apk/release/app-release.apk GUpdater.apk
           if gh release view "$TAG_NAME" --repo "$REPO" >/dev/null 2>&1; then
             gh release upload "$TAG_NAME" GUpdater.apk --repo "$REPO" --clobber
+            gh api --method PATCH "repos/$REPO/git/refs/tags/$TAG_NAME" \
+              -f sha="$GITHUB_SHA" -F force=true --silent \
+              || echo "::warning::The tag still points at an older commit."
           else
             gh release create "$TAG_NAME" GUpdater.apk \
               --repo "$REPO" \
