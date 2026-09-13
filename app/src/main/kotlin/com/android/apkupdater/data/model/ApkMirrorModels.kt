@@ -9,6 +9,7 @@ data class ApkMirrorApp(
 
 data class ApkMirrorApk(
     val versionCode: Long,
+    val description: String,
     val link: String,
     val publishDate: String,
     val architectures: List<String>,

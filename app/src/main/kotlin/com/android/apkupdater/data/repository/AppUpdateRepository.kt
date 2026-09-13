@@ -111,7 +111,7 @@ class AppUpdateRepository(
             AppUpdateInfo(
                 packageName = installed.packageName,
                 appName = packageManager.appLabel(installed.packageName),
-                newVersionName = app.versionName,
+                newVersionName = fullVersionName(apk, app.versionName),
                 newVersionCode = apk.versionCode,
                 publishedAt = publishedAt(apk.publishDate.ifBlank { app.publishDate }),
                 apkMirrorUrl = apk.link.toAbsoluteApkMirrorUrl()
@@ -137,6 +137,12 @@ class AppUpdateRepository(
                     .thenByDescending(ApkMirrorApk::minimumApi)
                     .thenByDescending(ApkMirrorApk::versionCode)
             )
+    }
+
+    private fun fullVersionName(apk: ApkMirrorApk, releaseVersion: String): String {
+        val description = apk.description.trim()
+        val detailed = releaseVersion.isNotEmpty() && description.startsWith(releaseVersion)
+        return if (detailed) description else releaseVersion
     }
 
     private fun abiRank(apk: ApkMirrorApk): Int {

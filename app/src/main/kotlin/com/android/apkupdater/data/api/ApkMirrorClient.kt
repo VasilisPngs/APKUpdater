@@ -56,6 +56,7 @@ class ApkMirrorClient(private val userAgent: String) {
 
             ApkMirrorApk(
                 versionCode = entry.optLong("version_code"),
+                description = entry.optString("description"),
                 link = entry.optString("link"),
                 publishDate = entry.optString("publish_date"),
                 architectures = parseStrings(entry.optJSONArray("arches")),
