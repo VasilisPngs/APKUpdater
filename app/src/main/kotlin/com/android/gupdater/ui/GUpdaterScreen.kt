@@ -24,10 +24,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.Home
-import androidx.compose.material.icons.rounded.MoreVert
-import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material3.BottomAppBar
 import androidx.compose.material3.BottomAppBarDefaults
 import androidx.compose.material3.CenterAlignedTopAppBar
@@ -38,8 +34,8 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.ListItem
 import androidx.compose.material3.Card
+import androidx.compose.material3.ListItem
 import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBarItem
@@ -54,11 +50,11 @@ import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -69,6 +65,7 @@ import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -84,9 +81,9 @@ import kotlinx.coroutines.withContext
 
 private val APP_ICON_SIZE = 56.dp
 
-private enum class AppTab(val labelRes: Int) {
-    Home(R.string.home),
-    Settings(R.string.settings)
+private enum class AppTab(val labelRes: Int, val iconRes: Int) {
+    Home(R.string.home, R.drawable.ic_home),
+    Settings(R.string.settings, R.drawable.ic_settings)
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -97,12 +94,11 @@ fun GUpdaterScreen(
 ) {
     val context = LocalContext.current
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
-    var selectedTabIndex by remember { mutableIntStateOf(AppTab.Home.ordinal) }
+    var selectedTab by rememberSaveable { mutableStateOf(AppTab.Home) }
     var menuExpanded by remember { mutableStateOf(false) }
     val homeListState = rememberLazyListState()
     val coroutineScope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
-    val selectedTab = AppTab.entries[selectedTabIndex]
     val bundlePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         uri?.let(viewModel::installBundle)
     }
@@ -128,12 +124,11 @@ fun GUpdaterScreen(
         if (status is ScanStatus.Error) snackbarHostState.showSnackbar(status.message)
     }
 
-    val updateMap = remember(uiState.updates) {
-        uiState.updates.associateBy(AppUpdateInfo::packageName)
-    }
-    val appsWithUpdates = remember(uiState.installedApps, uiState.updates) {
+    val updates = remember(uiState.installedApps, uiState.updates) {
         val installedByPackage = uiState.installedApps.associateBy(InstalledApp::packageName)
-        uiState.updates.mapNotNull { installedByPackage[it.packageName] }
+        uiState.updates.mapNotNull { update ->
+            installedByPackage[update.packageName]?.let { it to update }
+        }
     }
 
     Scaffold(
@@ -146,7 +141,7 @@ fun GUpdaterScreen(
                 actions = {
                     IconButton(onClick = { menuExpanded = true }) {
                         Icon(
-                            imageVector = Icons.Rounded.MoreVert,
+                            painter = painterResource(R.drawable.ic_more_vert),
                             contentDescription = stringResource(R.string.more_options)
                         )
                     }
@@ -176,7 +171,7 @@ fun GUpdaterScreen(
                         selected = selectedTab == tab,
                         onClick = {
                             when {
-                                selectedTab != tab -> selectedTabIndex = tab.ordinal
+                                selectedTab != tab -> selectedTab = tab
                                 tab != AppTab.Home -> Unit
                                 homeListState.canScrollBackward ->
                                     coroutineScope.launch { homeListState.animateScrollToItem(0) }
@@ -185,10 +180,7 @@ fun GUpdaterScreen(
                         },
                         icon = {
                             Icon(
-                                imageVector = when (tab) {
-                                    AppTab.Home -> Icons.Rounded.Home
-                                    AppTab.Settings -> Icons.Rounded.Settings
-                                },
+                                painter = painterResource(tab.iconRes),
                                 contentDescription = stringResource(tab.labelRes)
                             )
                         },
@@ -208,8 +200,7 @@ fun GUpdaterScreen(
                 modifier = Modifier.fillMaxSize(),
                 contentPadding = innerPadding,
                 isScanning = uiState.scanStatus == ScanStatus.Scanning,
-                apps = appsWithUpdates,
-                updateMap = updateMap,
+                updates = updates,
                 listState = homeListState,
                 installs = uiState.installs,
                 onScan = viewModel::scanForUpdates,
@@ -229,15 +220,14 @@ private fun HomeContent(
     modifier: Modifier,
     contentPadding: PaddingValues,
     isScanning: Boolean,
-    apps: List<InstalledApp>,
-    updateMap: Map<String, AppUpdateInfo>,
+    updates: List<Pair<InstalledApp, AppUpdateInfo>>,
     listState: LazyListState,
     installs: Map<String, InstallState>,
     onScan: () -> Unit,
     onPlayStoreUpdate: (InstalledApp, Long) -> Unit
 ) {
-    val fileInstalls = remember(installs, apps) {
-        installs.filterKeys { key -> apps.none { it.packageName == key } }.values.toList()
+    val fileInstalls = remember(installs, updates) {
+        installs.filterKeys { key -> updates.none { (app, _) -> app.packageName == key } }.values.toList()
     }
 
     PullToRefreshBox(
@@ -273,16 +263,14 @@ private fun HomeContent(
                 ),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                items(apps, key = { it.packageName }) { app ->
-                    updateMap[app.packageName]?.let { update ->
-                        AppListItem(
-                            modifier = Modifier.animateItem(),
-                            app = app,
-                            update = update,
-                            installState = installs[app.packageName],
-                            onPlayStoreUpdate = { versionCode -> onPlayStoreUpdate(app, versionCode) }
-                        )
-                    }
+                items(updates, key = { (app, _) -> app.packageName }) { (app, update) ->
+                    AppListItem(
+                        modifier = Modifier.animateItem(),
+                        app = app,
+                        update = update,
+                        installState = installs[app.packageName],
+                        onPlayStoreUpdate = { versionCode -> onPlayStoreUpdate(app, versionCode) }
+                    )
                 }
             }
         }

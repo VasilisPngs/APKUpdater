@@ -7,6 +7,7 @@ import android.content.pm.Signature
 import android.content.pm.SigningInfo
 import android.os.Build
 import com.android.gupdater.data.api.ApkMirrorClient
+import com.android.gupdater.data.appLabel
 import com.android.gupdater.data.model.ApkMirrorApk
 import com.android.gupdater.data.model.ApkMirrorApp
 import com.android.gupdater.data.model.AppUpdateInfo
@@ -143,7 +144,7 @@ class AppUpdateRepository(
                 playVersionCode = playApp.versionCode
             ) ?: AppUpdateInfo(
                 packageName = packageName,
-                appName = label(packageName),
+                appName = packageManager.appLabel(packageName),
                 newVersionName = playApp.versionName,
                 newVersionCode = playApp.versionCode,
                 publishedAt = null,
@@ -175,7 +176,7 @@ class AppUpdateRepository(
 
             AppUpdateInfo(
                 packageName = installed.packageName,
-                appName = label(installed.packageName),
+                appName = packageManager.appLabel(installed.packageName),
                 newVersionName = app.versionName,
                 newVersionCode = apk.versionCode,
                 publishedAt = publishedAt(apk.publishDate.ifBlank { app.publishDate }),
@@ -253,13 +254,6 @@ class AppUpdateRepository(
             apk.signatureSha1s.any { it in installed.signatureSha1s }
         else -> true
     }
-
-    private fun label(packageName: String): String = runCatching {
-        packageManager.getApplicationInfo(packageName, PackageManager.ApplicationInfoFlags.of(0))
-            .loadLabel(packageManager)
-            .toString()
-            .trim()
-    }.getOrNull()?.ifEmpty { null } ?: packageName
 
     private fun publishedAt(value: String): Long? {
         val text = value.trim().replace(' ', 'T')

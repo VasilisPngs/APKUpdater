@@ -6,6 +6,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.PackageInstaller
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -72,6 +73,9 @@ class PackageInstallerManager(private val context: Context) {
             session.commit(pendingIntent.intentSender)
             session.close()
             result.await()
+        } catch (exception: CancellationException) {
+            runCatching { session.abandon() }
+            throw exception
         } catch (exception: Exception) {
             runCatching { session.abandon() }
             Result.failure(exception)
@@ -90,7 +94,6 @@ class PackageInstallerManager(private val context: Context) {
     }
 
     private companion object {
-        const val COPY_BUFFER_SIZE = 64 * 1024
         val sessionLock = Mutex()
         val MISSING_LIBRARY_PATTERN = Regex("shared library ([^\\s;]+)")
     }

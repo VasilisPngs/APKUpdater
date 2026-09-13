@@ -137,7 +137,6 @@ class BundleInstaller(private val context: Context) {
         const val MASTER_SPLIT = "master"
         const val NO_DENSITY = "nodpi"
         const val FALLBACK_LANGUAGE = "en"
-        const val COPY_BUFFER_SIZE = 64 * 1024
         val ABIS = setOf("armeabi", "armeabi_v7a", "arm64_v8a", "x86", "x86_64", "riscv64")
         val DENSITIES = mapOf(
             "ldpi" to 120,

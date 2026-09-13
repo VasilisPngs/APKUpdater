@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.pm.PackageManager
 import android.util.Base64
 import com.android.gupdater.data.api.SharedHttpClient
+import com.android.gupdater.data.appLabel
 import com.android.gupdater.data.model.InstallState
 import com.android.gupdater.data.model.InstalledApp
 import com.android.gupdater.data.play.PlayAuthProvider
@@ -30,7 +31,7 @@ class GooglePlayInstaller(
         versionCode: Long,
         onState: (InstallState) -> Unit
     ): Result<Unit> = withContext(Dispatchers.IO) {
-        val appName = label(app.packageName)
+        val appName = context.packageManager.appLabel(app.packageName)
         val directory = File(context.cacheDir, "play_${app.packageName}_$versionCode")
         try {
             require(versionCode > app.versionCode) {
@@ -114,7 +115,7 @@ class GooglePlayInstaller(
                 }
                 response.body.byteStream().use { input ->
                     target.outputStream().use { output ->
-                        val buffer = ByteArray(DOWNLOAD_BUFFER_SIZE)
+                        val buffer = ByteArray(COPY_BUFFER_SIZE)
                         while (true) {
                             val read = input.read(buffer)
                             if (read == -1) break
@@ -163,13 +164,6 @@ class GooglePlayInstaller(
             .getSharedLibraries(PackageManager.PackageInfoFlags.of(0))
             .any { it.name == packageName && it.longVersion == versionCode }
 
-    private fun label(packageName: String): String = runCatching {
-        context.packageManager.getApplicationInfo(
-            packageName,
-            PackageManager.ApplicationInfoFlags.of(0)
-        ).loadLabel(context.packageManager).toString().trim()
-    }.getOrNull()?.ifEmpty { null } ?: packageName
-
     private fun certificateHash(packageName: String): String? = runCatching {
         val signingInfo = context.packageManager.getPackageInfo(
             packageName,
@@ -186,7 +180,4 @@ class GooglePlayInstaller(
 
     private class PlaySession(val authData: AuthData, val details: App)
 
-    private companion object {
-        const val DOWNLOAD_BUFFER_SIZE = 64 * 1024
-    }
 }
