@@ -413,7 +413,7 @@ private fun AppListItem(
                 horizontalArrangement = Arrangement.End
             ) {
                 FilledTonalButton(onClick = { openUrlInBrowser(context, update.apkMirrorUrl) }) {
-                    Text(stringResource(R.string.apkmirror))
+                    Text(stringResource(R.string.update))
                 }
             }
         }

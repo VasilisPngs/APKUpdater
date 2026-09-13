@@ -2,7 +2,7 @@
     <string name="app_name">APKUpdater</string>
     <string name="home">Home</string>
     <string name="settings">Settings</string>
-    <string name="apkmirror">APKMirror</string>
+    <string name="update">Update</string>
     <string name="copy_version_code">Copy version code</string>
     <string name="disabled_apps">Disabled apps</string>
     <string name="disabled_apps_description">Include disabled applications when checking for updates</string>
