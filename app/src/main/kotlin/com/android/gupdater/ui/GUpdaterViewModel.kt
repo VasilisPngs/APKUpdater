@@ -10,7 +10,6 @@ import com.android.gupdater.data.model.AppUpdateInfo
 import com.android.gupdater.data.model.InstallState
 import com.android.gupdater.data.model.InstalledApp
 import com.android.gupdater.data.play.PlayAuthProvider
-import com.android.gupdater.data.play.PlayCatalog
 import com.android.gupdater.data.preferences.AppPreferences
 import com.android.gupdater.data.repository.AppUpdateRepository
 import com.android.gupdater.data.repository.ScanStatus
@@ -43,15 +42,10 @@ data class UpdaterUiState(
 class GUpdaterViewModel(application: Application) : AndroidViewModel(application) {
     private val preferences = AppPreferences(application.applicationContext)
     private val authProvider = PlayAuthProvider(application.applicationContext)
-    private val repository = AppUpdateRepository(
-        application.applicationContext,
-        PlayCatalog(authProvider)
-    )
+    private val repository = AppUpdateRepository(application.applicationContext)
     private val googlePlayInstaller = GooglePlayInstaller(application.applicationContext, authProvider)
     private val bundleInstaller = BundleInstaller(application.applicationContext)
-    private val _uiState = MutableStateFlow(
-        UpdaterUiState(includeDisabledApps = preferences.includeDisabledApps)
-    )
+    private val _uiState = MutableStateFlow(UpdaterUiState())
     private val _events = MutableSharedFlow<InstallEvent>(extraBufferCapacity = 16)
     private val installJobs = ConcurrentHashMap<String, Job>()
     private var scanJob: Job? = null
@@ -61,7 +55,13 @@ class GUpdaterViewModel(application: Application) : AndroidViewModel(application
 
     init {
         viewModelScope.launch {
-            _uiState.update { it.copy(installedApps = repository.getInstalledApps()) }
+            val includeDisabledApps = withContext(Dispatchers.IO) { preferences.includeDisabledApps }
+            _uiState.update {
+                it.copy(
+                    installedApps = repository.getInstalledApps(),
+                    includeDisabledApps = includeDisabledApps
+                )
+            }
             scanForUpdates()
         }
     }
@@ -88,7 +88,7 @@ class GUpdaterViewModel(application: Application) : AndroidViewModel(application
         }
     }
 
-    fun installFromPlay(app: InstalledApp, versionCode: Long) =
+    fun installVersion(app: InstalledApp, versionCode: Long) =
         install(app.packageName, app.packageName) { onState ->
             googlePlayInstaller.install(app, versionCode, onState)
         }
@@ -99,8 +99,8 @@ class GUpdaterViewModel(application: Application) : AndroidViewModel(application
 
     fun setIncludeDisabledApps(include: Boolean) {
         if (_uiState.value.includeDisabledApps == include) return
-        preferences.includeDisabledApps = include
         _uiState.update { it.copy(includeDisabledApps = include) }
+        viewModelScope.launch(Dispatchers.IO) { preferences.includeDisabledApps = include }
         scanForUpdates()
     }
 

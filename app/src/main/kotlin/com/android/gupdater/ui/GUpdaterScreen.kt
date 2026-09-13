@@ -1,12 +1,15 @@
 package com.android.gupdater.ui
 
+import android.content.ClipData
 import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -25,6 +28,8 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.BottomAppBar
 import androidx.compose.material3.BottomAppBarDefaults
 import androidx.compose.material3.Card
@@ -41,6 +46,7 @@ import androidx.compose.material3.ListItem
 import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Snackbar
 import androidx.compose.material3.SnackbarDuration
@@ -48,6 +54,7 @@ import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
@@ -62,15 +69,21 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.ClipEntry
+import androidx.compose.ui.platform.LocalClipboard
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.core.graphics.drawable.toBitmap
@@ -86,6 +99,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 private val APP_ICON_SIZE = 56.dp
+private const val MAX_VERSION_CODE_DIGITS = 19
 
 private enum class AppTab(val labelRes: Int, val iconRes: Int, val selectedIconRes: Int) {
     Home(R.string.home, R.drawable.ic_home, R.drawable.ic_home_filled),
@@ -186,10 +200,9 @@ fun GUpdaterScreen(
                         onClick = {
                             when {
                                 !selected -> selectedTab = tab
-                                tab != AppTab.Home -> Unit
-                                homeListState.canScrollBackward ->
+                                tab == AppTab.Home && homeListState.canScrollBackward ->
                                     coroutineScope.launch { homeListState.animateScrollToItem(0) }
-                                else -> viewModel.scanForUpdates()
+                                else -> Unit
                             }
                         },
                         icon = {
@@ -211,22 +224,24 @@ fun GUpdaterScreen(
             }
         }
     ) { innerPadding ->
-        when (selectedTab) {
-            AppTab.Home -> HomeContent(
-                modifier = Modifier.fillMaxSize(),
-                contentPadding = innerPadding,
-                isScanning = uiState.scanStatus == ScanStatus.Scanning,
-                updates = updates,
-                listState = homeListState,
-                installs = uiState.installs,
-                onScan = viewModel::scanForUpdates,
-                onPlayStoreUpdate = { app, versionCode -> viewModel.installFromPlay(app, versionCode) }
-            )
-            AppTab.Settings -> SettingsContent(
-                modifier = Modifier.fillMaxSize().padding(innerPadding),
-                includeDisabledApps = uiState.includeDisabledApps,
-                onIncludeDisabledAppsChange = viewModel::setIncludeDisabledApps
-            )
+        AnimatedContent(targetState = selectedTab) { tab ->
+            when (tab) {
+                AppTab.Home -> HomeContent(
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = innerPadding,
+                    isScanning = uiState.scanStatus == ScanStatus.Scanning,
+                    updates = updates,
+                    listState = homeListState,
+                    installs = uiState.installs,
+                    onScan = viewModel::scanForUpdates,
+                    onManualUpdate = viewModel::installVersion
+                )
+                AppTab.Settings -> SettingsContent(
+                    modifier = Modifier.fillMaxSize().padding(innerPadding),
+                    includeDisabledApps = uiState.includeDisabledApps,
+                    onIncludeDisabledAppsChange = viewModel::setIncludeDisabledApps
+                )
+            }
         }
     }
 }
@@ -240,7 +255,7 @@ private fun HomeContent(
     listState: LazyListState,
     installs: Map<String, InstallState>,
     onScan: () -> Unit,
-    onPlayStoreUpdate: (InstalledApp, Long) -> Unit
+    onManualUpdate: (InstalledApp, Long) -> Unit
 ) {
     val layoutDirection = LocalLayoutDirection.current
     val fileInstalls = remember(installs, updates) {
@@ -290,7 +305,7 @@ private fun HomeContent(
                         app = app,
                         update = update,
                         installState = installs[app.packageName],
-                        onPlayStoreUpdate = { versionCode -> onPlayStoreUpdate(app, versionCode) }
+                        onManualUpdate = { versionCode -> onManualUpdate(app, versionCode) }
                     )
                 }
             }
@@ -314,9 +329,13 @@ private fun AppListItem(
     app: InstalledApp,
     update: AppUpdateInfo,
     installState: InstallState?,
-    onPlayStoreUpdate: (Long) -> Unit
+    onManualUpdate: (Long) -> Unit
 ) {
     val context = LocalContext.current
+    val clipboard = LocalClipboard.current
+    val coroutineScope = rememberCoroutineScope()
+    val copyLabel = stringResource(R.string.copy_version_code)
+    var manualVisible by rememberSaveable { mutableStateOf(false) }
     val iconSizePx = with(LocalDensity.current) { APP_ICON_SIZE.roundToPx() }
     val iconBitmap by produceState<Bitmap?>(initialValue = null, key1 = app.packageName) {
         value = withContext(Dispatchers.IO) {
@@ -364,7 +383,23 @@ private fun AppListItem(
                             update.newVersionName,
                             update.newVersionCode
                         ),
-                        style = MaterialTheme.typography.bodyLarge
+                        style = MaterialTheme.typography.bodyLarge,
+                        modifier = Modifier.combinedClickable(
+                            onLongClickLabel = copyLabel,
+                            onLongClick = {
+                                coroutineScope.launch {
+                                    clipboard.setClipEntry(
+                                        ClipEntry(
+                                            ClipData.newPlainText(
+                                                copyLabel,
+                                                update.newVersionCode.toString()
+                                            )
+                                        )
+                                    )
+                                }
+                            },
+                            onClick = {}
+                        )
                     )
                 }
             }
@@ -374,39 +409,80 @@ private fun AppListItem(
                 horizontalArrangement = Arrangement.End,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                if (update.playAvailable) {
-                    FilledTonalButton(
-                        onClick = { onPlayStoreUpdate(update.playVersionCode ?: update.newVersionCode) }
-                    ) {
-                        Box(contentAlignment = Alignment.Center) {
-                            Text(
-                                text = stringResource(R.string.play_store),
-                                modifier = Modifier.alpha(if (installState == null) 1f else 0f)
+                FilledTonalButton(onClick = { manualVisible = true }) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Text(
+                            text = stringResource(R.string.manual),
+                            modifier = Modifier.alpha(if (installState == null) 1f else 0f)
+                        )
+                        when (installState) {
+                            null -> Unit
+                            is InstallState.Downloading -> CircularProgressIndicator(
+                                progress = { installState.progress },
+                                modifier = Modifier.size(20.dp),
+                                strokeWidth = 2.dp
                             )
-                            when (installState) {
-                                null -> Unit
-                                is InstallState.Downloading -> CircularProgressIndicator(
-                                    progress = { installState.progress },
-                                    modifier = Modifier.size(20.dp),
-                                    strokeWidth = 2.dp
-                                )
-                                else -> CircularProgressIndicator(
-                                    modifier = Modifier.size(20.dp),
-                                    strokeWidth = 2.dp
-                                )
-                            }
+                            else -> CircularProgressIndicator(
+                                modifier = Modifier.size(20.dp),
+                                strokeWidth = 2.dp
+                            )
                         }
                     }
-                    if (update.apkMirrorUrl != null) Spacer(Modifier.width(8.dp))
                 }
-                if (update.apkMirrorUrl != null) {
-                    FilledTonalButton(onClick = { openUrlInBrowser(context, update.apkMirrorUrl) }) {
-                        Text(stringResource(R.string.apkmirror))
-                    }
+                Spacer(Modifier.width(8.dp))
+                FilledTonalButton(onClick = { openUrlInBrowser(context, update.apkMirrorUrl) }) {
+                    Text(stringResource(R.string.apkmirror))
                 }
             }
         }
     }
+
+    if (manualVisible) {
+        ManualVersionDialog(
+            onDismiss = { manualVisible = false },
+            onConfirm = { versionCode ->
+                manualVisible = false
+                onManualUpdate(versionCode)
+            }
+        )
+    }
+}
+
+@Composable
+private fun ManualVersionDialog(onDismiss: () -> Unit, onConfirm: (Long) -> Unit) {
+    var input by rememberSaveable { mutableStateOf("") }
+    val versionCode = input.toLongOrNull()
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.update_with_version_code)) },
+        text = {
+            val focusRequester = remember { FocusRequester() }
+            LaunchedEffect(Unit) { focusRequester.requestFocus() }
+
+            OutlinedTextField(
+                value = input,
+                onValueChange = { text ->
+                    input = text.filter(Char::isDigit).take(MAX_VERSION_CODE_DIGITS)
+                },
+                modifier = Modifier.focusRequester(focusRequester),
+                label = { Text(stringResource(R.string.version_code)) },
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(
+                    keyboardType = KeyboardType.Number,
+                    imeAction = ImeAction.Done
+                )
+            )
+        },
+        confirmButton = {
+            TextButton(enabled = versionCode != null, onClick = { versionCode?.let(onConfirm) }) {
+                Text(stringResource(android.R.string.ok))
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text(stringResource(android.R.string.cancel)) }
+        }
+    )
 }
 
 @Composable

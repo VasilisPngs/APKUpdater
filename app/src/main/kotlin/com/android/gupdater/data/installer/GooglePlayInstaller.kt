@@ -43,14 +43,13 @@ class GooglePlayInstaller(
             directory.mkdirs()
 
             val session = openSession(app.packageName)
-            val files = purchase(session, app, versionCode)
+            val files = purchase(session, app.packageName, versionCode, session.details.offerType)
 
             val apkFiles = download(appName, files, directory, onState)
             installDependencies(session, appName, directory, onState)
 
             onState(InstallState.Installing(appName))
             packageInstaller.install(apkFiles.map(ApkSource::of)).getOrThrow()
-            directory.deleteRecursively()
             onState(InstallState.Success(appName))
             Result.success(Unit)
         } catch (exception: CancellationException) {
@@ -58,6 +57,8 @@ class GooglePlayInstaller(
         } catch (exception: Exception) {
             onState(InstallState.Error(appName, exception.message ?: "Installation failed"))
             Result.failure(exception)
+        } finally {
+            directory.deleteRecursively()
         }
     }
 
@@ -71,30 +72,32 @@ class GooglePlayInstaller(
         return PlaySession(renewed, AppDetailsHelper(renewed).getAppByPackageName(packageName))
     }
 
-    private fun purchase(session: PlaySession, app: InstalledApp, versionCode: Long): List<PlayFile> = try {
-        purchase(session, app.packageName, versionCode, session.details.offerType)
-    } catch (exception: Exception) {
-        val playVersionCode = session.details.versionCode
-        if (playVersionCode == versionCode || playVersionCode <= app.versionCode) throw exception
-        purchase(session, app.packageName, playVersionCode, session.details.offerType)
-    }
-
     private fun purchase(
         session: PlaySession,
         packageName: String,
         versionCode: Long,
         offerType: Int
     ): List<PlayFile> {
-        val files = PurchaseHelper(session.authData).purchase(
-            packageName = packageName,
-            versionCode = versionCode,
-            offerType = offerType,
-            certificateHash = certificateHash(packageName)
-        ).filter { it.type == PlayFile.Type.BASE || it.type == PlayFile.Type.SPLIT }
+        val files = try {
+            PurchaseHelper(session.authData).purchase(
+                packageName = packageName,
+                versionCode = versionCode,
+                offerType = offerType,
+                certificateHash = certificateHash(packageName)
+            )
+        } catch (exception: CancellationException) {
+            throw exception
+        } catch (exception: Exception) {
+            throw IllegalStateException(unavailable(packageName, versionCode), exception)
+        }.filter { it.type == PlayFile.Type.BASE || it.type == PlayFile.Type.SPLIT }
 
-        require(files.isNotEmpty()) { "Google Play returned no installable APK files." }
+        require(files.isNotEmpty()) { unavailable(packageName, versionCode) }
         return files
     }
+
+    private fun unavailable(packageName: String, versionCode: Long): String =
+        "Google Play has no version code $versionCode for $packageName."
+
 
     private fun download(
         appName: String,
