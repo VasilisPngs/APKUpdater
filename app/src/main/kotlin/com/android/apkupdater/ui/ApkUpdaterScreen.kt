@@ -275,8 +275,8 @@ private fun ScanStatusLine(isScanning: Boolean, found: Int) {
             } else {
                 pluralStringResource(R.plurals.updates_found, found, found)
             },
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
+            style = MaterialTheme.typography.bodyLarge,
+            color = MaterialTheme.colorScheme.onSurface
         )
         if (isScanning) {
             CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
