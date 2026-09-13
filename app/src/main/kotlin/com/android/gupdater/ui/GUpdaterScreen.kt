@@ -4,7 +4,6 @@ import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.Canvas
-import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
@@ -69,6 +68,8 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.core.graphics.createBitmap
+import androidx.core.net.toUri
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.android.gupdater.R
 import com.android.gupdater.data.model.AppUpdateInfo
@@ -388,7 +389,7 @@ private fun AppListItem(
 }
 
 private fun android.graphics.drawable.Drawable.toBitmap(sizePx: Int): Bitmap =
-    Bitmap.createBitmap(sizePx, sizePx, Bitmap.Config.ARGB_8888).also { bitmap ->
+    createBitmap(sizePx, sizePx).also { bitmap ->
         Canvas(bitmap).also { canvas ->
             setBounds(0, 0, sizePx, sizePx)
             draw(canvas)
@@ -416,5 +417,5 @@ private fun SettingsContent(
 }
 
 private fun openUrlInBrowser(context: Context, url: String) {
-    runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url))) }
+    runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, url.toUri())) }
 }

@@ -162,6 +162,5 @@ class GUpdaterViewModel(application: Application) : AndroidViewModel(application
     override fun onCleared() {
         scanJob?.cancel()
         installJobs.values.forEach(Job::cancel)
-        super.onCleared()
     }
 }
