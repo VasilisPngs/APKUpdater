@@ -57,6 +57,9 @@ class ApkMirrorClient(private val userAgent: String) {
 
             ApkMirrorApk(
                 versionCode = entry.optLong("version_code"),
+                versionName = VERSION_KEYS.firstNotNullOfOrNull { key ->
+                    entry.optString(key).trim().ifBlank { null }
+                }.orEmpty(),
                 link = entry.optString("link"),
                 publishDate = entry.optString("publish_date"),
                 architectures = parseStrings(entry.optJSONArray("arches")),
@@ -80,6 +83,7 @@ class ApkMirrorClient(private val userAgent: String) {
         const val APP_EXISTS_URL = "https://www.apkmirror.com/wp-json/apkm/v1/app_exists/"
         const val AUTHORIZATION = "Basic YXBpLWFwa3VwZGF0ZXI6cm01cmNmcnVVakt5MDRzTXB5TVBKWFc4"
         val EXCLUDED_CHANNELS = listOf("alpha", "beta")
+        val VERSION_KEYS = listOf("version", "version_name", "versionName")
         val JSON_MEDIA_TYPE = "application/json".toMediaType()
     }
 }
