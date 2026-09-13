@@ -69,19 +69,19 @@ jobs:
           TAG_NAME: APKUpdater
         run: |
           cp app/build/outputs/apk/release/app-release.apk APKUpdater.apk
-          CHANGES="$(git log -1 --pretty=%B | sed '/^Co-Authored-By:/d;/^Claude-Session:/d')"
-          NOTES="$CHANGES
-
-          Built from ${GITHUB_SHA:0:7} on $(date -u '+%d %B %Y, %H:%M UTC')."
           if gh release view "$TAG_NAME" --repo "$REPO" >/dev/null 2>&1; then
             gh release upload "$TAG_NAME" APKUpdater.apk --repo "$REPO" --clobber
-            gh release edit "$TAG_NAME" --repo "$REPO" --notes "$NOTES" >/dev/null
             gh api --method PATCH "repos/$REPO/git/refs/tags/$TAG_NAME" \
               -f sha="$GITHUB_SHA" -F force=true --silent \
               || echo "::warning::The tag still points at an older commit."
+            gh release edit "$TAG_NAME" --repo "$REPO" --draft >/dev/null
+            for attempt in 1 2 3; do
+              gh release edit "$TAG_NAME" --repo "$REPO" --draft=false >/dev/null && break || sleep 5
+            done
+            test "$(gh release view "$TAG_NAME" --repo "$REPO" --json isDraft --jq .isDraft)" = false
           else
             gh release create "$TAG_NAME" APKUpdater.apk \
               --repo "$REPO" \
               --title "APKUpdater" \
-              --notes "$NOTES"
+              --notes " "
           fi
