@@ -17,7 +17,7 @@
     <string name="update_installed">%1$s was updated</string>
     <string name="update_failed">Update failed: %1$s</string>
     <plurals name="updates_found">
-        <item quantity="one">%1$d app</item>
-        <item quantity="other">%1$d apps</item>
+        <item quantity="one">%1$d update available</item>
+        <item quantity="other">%1$d updates available</item>
     </plurals>
 </resources>

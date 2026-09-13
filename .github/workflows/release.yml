@@ -69,7 +69,10 @@ jobs:
           TAG_NAME: APKUpdater
         run: |
           cp app/build/outputs/apk/release/app-release.apk APKUpdater.apk
-          NOTES="Built from ${GITHUB_SHA:0:7} on $(date -u '+%d %B %Y, %H:%M UTC')."
+          CHANGES="$(git log -1 --pretty=%B | sed '/^Co-Authored-By:/d;/^Claude-Session:/d')"
+          NOTES="$CHANGES
+
+          Built from ${GITHUB_SHA:0:7} on $(date -u '+%d %B %Y, %H:%M UTC')."
           if gh release view "$TAG_NAME" --repo "$REPO" >/dev/null 2>&1; then
             gh release upload "$TAG_NAME" APKUpdater.apk --repo "$REPO" --clobber
             gh release edit "$TAG_NAME" --repo "$REPO" --notes "$NOTES" >/dev/null
