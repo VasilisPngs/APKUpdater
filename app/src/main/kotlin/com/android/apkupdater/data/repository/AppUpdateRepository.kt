@@ -113,6 +113,7 @@ class AppUpdateRepository(
                 appName = packageManager.appLabel(installed.packageName),
                 newVersionName = app.versionName,
                 newVersionCode = apk.versionCode,
+                variant = variantLabel(apk),
                 publishedAt = publishedAt(apk.publishDate.ifBlank { app.publishDate }),
                 apkMirrorUrl = apk.link.toAbsoluteApkMirrorUrl()
             )
@@ -138,6 +139,12 @@ class AppUpdateRepository(
                     .thenByDescending(ApkMirrorApk::versionCode)
             )
     }
+
+    private fun variantLabel(apk: ApkMirrorApk): String =
+        (apk.architectures + apk.densities.map(::densityLabel)).joinToString(", ")
+
+    private fun densityLabel(density: String): String =
+        if (density.toIntOrNull() == null) density else density + DENSITY_SUFFIX
 
     private fun abiRank(apk: ApkMirrorApk): Int {
         if (apk.architectures.isEmpty()) return universalAbiRank
@@ -243,6 +250,7 @@ class AppUpdateRepository(
         const val APKMIRROR_URL = "https://www.apkmirror.com"
         const val APKMIRROR_PATH_PREFIX = "/apk/"
         const val NO_DENSITY = "nodpi"
+        const val DENSITY_SUFFIX = "dpi"
         const val WEAR_STANDALONE = "wear_standalone"
         const val LEANBACK = "leanback"
         const val LEANBACK_STANDALONE = "leanback_standalone"
