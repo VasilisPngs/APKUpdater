@@ -65,13 +65,15 @@ jobs:
         if: ${{ steps.release-check.outputs.ready == 'true' }}
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
           TAG_NAME: GUpdater
         run: |
-          APK_FILE="app/build/outputs/apk/release/app-release.apk"
-          test -f "$APK_FILE"
-          cp "$APK_FILE" "GUpdater.apk"
-          gh release delete "$TAG_NAME" --repo "${{ github.repository }}" --yes --cleanup-tag 2>/dev/null || true
-          gh release create "$TAG_NAME" "GUpdater.apk" \
-            --repo "${{ github.repository }}" \
-            --title "GUpdater" \
-            --notes " "
+          cp app/build/outputs/apk/release/app-release.apk GUpdater.apk
+          if gh release view "$TAG_NAME" --repo "$REPO" >/dev/null 2>&1; then
+            gh release upload "$TAG_NAME" GUpdater.apk --repo "$REPO" --clobber
+          else
+            gh release create "$TAG_NAME" GUpdater.apk \
+              --repo "$REPO" \
+              --title "GUpdater" \
+              --notes " "
+          fi
