@@ -55,5 +55,4 @@ dependencies {
     implementation(libs.androidx.compose.ui)
     implementation(libs.okhttp)
     implementation(libs.kotlinx.coroutines.android)
-    implementation(libs.aurora.gplayapi)
 }

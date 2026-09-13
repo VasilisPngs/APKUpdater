@@ -29,8 +29,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.BottomAppBarDefaults
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -45,7 +43,6 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.ShortNavigationBar
 import androidx.compose.material3.ShortNavigationBarItem
@@ -55,7 +52,6 @@ import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
@@ -69,8 +65,6 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
@@ -82,8 +76,6 @@ import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.input.ImeAction
-import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.core.graphics.drawable.toBitmap
@@ -97,10 +89,8 @@ import com.android.apkupdater.data.repository.ScanStatus
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import java.text.NumberFormat
 
 private val APP_ICON_SIZE = 56.dp
-private const val MAX_VERSION_CODE_DIGITS = 19
 
 private enum class AppTab(val labelRes: Int, val iconRes: Int, val selectedIconRes: Int) {
     Home(R.string.home, R.drawable.ic_home, R.drawable.ic_home_filled),
@@ -227,8 +217,7 @@ fun ApkUpdaterScreen(
                     updates = updates,
                     listState = homeListState,
                     installs = uiState.installs,
-                    onScan = viewModel::scanForUpdates,
-                    onManualUpdate = viewModel::installVersion
+                    onScan = viewModel::scanForUpdates
                 )
                 AppTab.Settings -> SettingsContent(
                     modifier = Modifier.fillMaxSize().padding(innerPadding),
@@ -273,8 +262,7 @@ private fun HomeContent(
     updates: List<Pair<InstalledApp, AppUpdateInfo>>,
     listState: LazyListState,
     installs: Map<String, InstallState>,
-    onScan: () -> Unit,
-    onManualUpdate: (InstalledApp, Long) -> Unit
+    onScan: () -> Unit
 ) {
     val layoutDirection = LocalLayoutDirection.current
     val fileInstalls = remember(installs, updates) {
@@ -324,9 +312,7 @@ private fun HomeContent(
                     AppListItem(
                         modifier = Modifier.animateItem(),
                         app = app,
-                        update = update,
-                        installState = installs[app.packageName],
-                        onManualUpdate = { versionCode -> onManualUpdate(app, versionCode) }
+                        update = update
                     )
                 }
             }
@@ -348,16 +334,12 @@ private fun RoundedSection(content: @Composable () -> Unit) {
 private fun AppListItem(
     modifier: Modifier,
     app: InstalledApp,
-    update: AppUpdateInfo,
-    installState: InstallState?,
-    onManualUpdate: (Long) -> Unit
+    update: AppUpdateInfo
 ) {
     val context = LocalContext.current
     val clipboard = LocalClipboard.current
     val coroutineScope = rememberCoroutineScope()
     val copyLabel = stringResource(R.string.copy_version_code)
-    var manualVisible by rememberSaveable { mutableStateOf(false) }
-    val percentFormat = remember { NumberFormat.getPercentInstance() }
     val iconSizePx = with(LocalDensity.current) { APP_ICON_SIZE.roundToPx() }
     val iconBitmap by produceState<Bitmap?>(initialValue = null, key1 = app.packageName) {
         value = withContext(Dispatchers.IO) {
@@ -428,77 +410,14 @@ private fun AppListItem(
             Spacer(Modifier.height(16.dp))
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.End,
-                verticalAlignment = Alignment.CenterVertically
+                horizontalArrangement = Arrangement.End
             ) {
-                if (update.manualAvailable) {
-                    FilledTonalButton(
-                        enabled = installState == null,
-                        onClick = { manualVisible = true }
-                    ) {
-                        Text(stringResource(R.string.manual))
-                        val downloading = installState as? InstallState.Downloading
-                        if (downloading != null) {
-                            Spacer(Modifier.width(ButtonDefaults.IconSpacing))
-                            Text(percentFormat.format(downloading.progress))
-                        }
-                    }
-                    Spacer(Modifier.width(8.dp))
-                }
                 FilledTonalButton(onClick = { openUrlInBrowser(context, update.apkMirrorUrl) }) {
                     Text(stringResource(R.string.apkmirror))
                 }
             }
         }
     }
-
-    if (manualVisible) {
-        ManualVersionDialog(
-            onDismiss = { manualVisible = false },
-            onConfirm = { versionCode ->
-                manualVisible = false
-                onManualUpdate(versionCode)
-            }
-        )
-    }
-}
-
-@Composable
-private fun ManualVersionDialog(onDismiss: () -> Unit, onConfirm: (Long) -> Unit) {
-    var input by rememberSaveable { mutableStateOf("") }
-    val versionCode = input.toLongOrNull()
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(stringResource(R.string.update_with_version_code)) },
-        text = {
-            val focusRequester = remember { FocusRequester() }
-            LaunchedEffect(Unit) { focusRequester.requestFocus() }
-
-            OutlinedTextField(
-                value = input,
-                onValueChange = { text ->
-                    input = text.filter(Char::isDigit).take(MAX_VERSION_CODE_DIGITS)
-                },
-                modifier = Modifier.focusRequester(focusRequester),
-                placeholder = { Text(stringResource(R.string.version_code)) },
-                shape = MaterialTheme.shapes.extraLarge,
-                singleLine = true,
-                keyboardOptions = KeyboardOptions(
-                    keyboardType = KeyboardType.Number,
-                    imeAction = ImeAction.Done
-                )
-            )
-        },
-        confirmButton = {
-            TextButton(enabled = versionCode != null, onClick = { versionCode?.let(onConfirm) }) {
-                Text(stringResource(R.string.ok))
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) }
-        }
-    )
 }
 
 @Composable

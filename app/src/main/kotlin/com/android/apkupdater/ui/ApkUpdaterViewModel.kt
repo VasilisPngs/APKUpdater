@@ -5,12 +5,9 @@ import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.android.apkupdater.data.installer.BundleInstaller
-import com.android.apkupdater.data.installer.GooglePlayInstaller
 import com.android.apkupdater.data.model.AppUpdateInfo
 import com.android.apkupdater.data.model.InstallState
 import com.android.apkupdater.data.model.InstalledApp
-import com.android.apkupdater.data.play.PlayAuthProvider
-import com.android.apkupdater.data.play.PlayCatalog
 import com.android.apkupdater.data.preferences.AppPreferences
 import com.android.apkupdater.data.repository.AppUpdateRepository
 import com.android.apkupdater.data.repository.ScanStatus
@@ -42,12 +39,7 @@ data class UpdaterUiState(
 
 class ApkUpdaterViewModel(application: Application) : AndroidViewModel(application) {
     private val preferences = AppPreferences(application.applicationContext)
-    private val authProvider = PlayAuthProvider(application.applicationContext)
-    private val repository = AppUpdateRepository(
-        application.applicationContext,
-        PlayCatalog(authProvider)
-    )
-    private val googlePlayInstaller = GooglePlayInstaller(application.applicationContext, authProvider)
+    private val repository = AppUpdateRepository(application.applicationContext)
     private val bundleInstaller = BundleInstaller(application.applicationContext)
     private val _uiState = MutableStateFlow(UpdaterUiState())
     private val _events = MutableSharedFlow<InstallEvent>(extraBufferCapacity = 16)
@@ -92,32 +84,13 @@ class ApkUpdaterViewModel(application: Application) : AndroidViewModel(applicati
         }
     }
 
-    fun installVersion(app: InstalledApp, versionCode: Long) =
-        install(app.packageName, app.packageName) { onState ->
-            googlePlayInstaller.install(app, versionCode, onState)
-        }
-
-    fun installBundle(uri: Uri) = install(uri.toString(), packageName = null) { onState ->
-        bundleInstaller.install(uri, onState)
-    }
-
-    fun setIncludeDisabledApps(include: Boolean) {
-        if (_uiState.value.includeDisabledApps == include) return
-        _uiState.update { it.copy(includeDisabledApps = include) }
-        viewModelScope.launch(Dispatchers.IO) { preferences.includeDisabledApps = include }
-        scanForUpdates()
-    }
-
-    private fun install(
-        key: String,
-        packageName: String?,
-        block: suspend (onState: (InstallState) -> Unit) -> Result<Unit>
-    ) {
+    fun installBundle(uri: Uri) {
+        val key = uri.toString()
         if (installJobs.containsKey(key)) return
 
         installJobs[key] = viewModelScope.launch {
             val result = withContext(Dispatchers.IO) {
-                block { state ->
+                bundleInstaller.install(uri) { state ->
                     when (state) {
                         is InstallState.Success -> _events.tryEmit(InstallEvent.Finished(state.appName))
                         is InstallState.Error -> _events.tryEmit(InstallEvent.Failed(state.message))
@@ -129,25 +102,15 @@ class ApkUpdaterViewModel(application: Application) : AndroidViewModel(applicati
 
             installJobs.remove(key)
             _uiState.update { it.copy(installs = it.installs - key) }
-
-            if (result.isSuccess) {
-                if (packageName != null) dropUpdate(packageName) else dropInstalledUpdates()
-            }
+            if (result.isSuccess) dropInstalledUpdates()
         }
     }
 
-    private suspend fun dropUpdate(packageName: String) {
-        val installed = repository.getInstalledApp(packageName) ?: return
-        _uiState.update { state ->
-            state.copy(
-                installedApps = state.installedApps.map {
-                    if (it.packageName == packageName) installed else it
-                },
-                updates = state.updates.filterNot {
-                    it.packageName == packageName && it.newVersionCode <= installed.versionCode
-                }
-            )
-        }
+    fun setIncludeDisabledApps(include: Boolean) {
+        if (_uiState.value.includeDisabledApps == include) return
+        _uiState.update { it.copy(includeDisabledApps = include) }
+        viewModelScope.launch(Dispatchers.IO) { preferences.includeDisabledApps = include }
+        scanForUpdates()
     }
 
     private suspend fun dropInstalledUpdates() {
