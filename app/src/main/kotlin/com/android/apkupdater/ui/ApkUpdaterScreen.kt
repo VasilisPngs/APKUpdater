@@ -191,10 +191,10 @@ fun ApkUpdaterScreen(
             Surface(
                 modifier = Modifier
                     .windowInsetsPadding(BottomAppBarDefaults.windowInsets)
-                    .padding(horizontal = 16.dp, vertical = 12.dp)
+                    .padding(start = 16.dp, end = 16.dp, bottom = 12.dp)
                     .fillMaxWidth(),
                 shape = MaterialTheme.shapes.extraLarge,
-                color = MaterialTheme.colorScheme.background
+                color = MaterialTheme.colorScheme.surfaceContainer
             ) {
                 Row {
                     AppTab.entries.forEach { tab ->
@@ -258,9 +258,9 @@ private fun cardColors(): CardColors =
 @Composable
 private fun ScanStatusLine(modifier: Modifier, isScanning: Boolean, found: Int) {
     Surface(
-        modifier = modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
+        modifier = modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, bottom = 12.dp),
         shape = MaterialTheme.shapes.extraLarge,
-        color = MaterialTheme.colorScheme.background
+        color = MaterialTheme.colorScheme.surfaceContainer
     ) {
         Row(
             modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp),
@@ -305,7 +305,8 @@ private fun HomeContent(
         modifier = modifier.padding(
             start = contentPadding.calculateStartPadding(layoutDirection),
             top = contentPadding.calculateTopPadding(),
-            end = contentPadding.calculateEndPadding(layoutDirection)
+            end = contentPadding.calculateEndPadding(layoutDirection),
+            bottom = contentPadding.calculateBottomPadding()
         )
     ) {
         PullToRefreshBox(isRefreshing = false, onRefresh = onScan) {
@@ -316,7 +317,7 @@ private fun HomeContent(
                     start = 16.dp,
                     top = statusHeight,
                     end = 16.dp,
-                    bottom = contentPadding.calculateBottomPadding() + 16.dp
+                    bottom = 16.dp
                 ),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
