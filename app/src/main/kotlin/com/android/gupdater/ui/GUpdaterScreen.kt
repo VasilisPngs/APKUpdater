@@ -235,7 +235,7 @@ private fun HomeContent(
     }
 
     Column(modifier = modifier.padding(top = contentPadding.calculateTopPadding())) {
-        RoundedSection {
+        Box(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
             ListItem(
                 colors = ListItemDefaults.colors(containerColor = Color.Transparent),
                 headlineContent = {
