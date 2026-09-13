@@ -10,6 +10,7 @@ import com.android.gupdater.data.model.AppUpdateInfo
 import com.android.gupdater.data.model.InstallState
 import com.android.gupdater.data.model.InstalledApp
 import com.android.gupdater.data.play.PlayAuthProvider
+import com.android.gupdater.data.play.PlayCatalog
 import com.android.gupdater.data.preferences.AppPreferences
 import com.android.gupdater.data.repository.AppUpdateRepository
 import com.android.gupdater.data.repository.ScanStatus
@@ -42,7 +43,10 @@ data class UpdaterUiState(
 class GUpdaterViewModel(application: Application) : AndroidViewModel(application) {
     private val preferences = AppPreferences(application.applicationContext)
     private val authProvider = PlayAuthProvider(application.applicationContext)
-    private val repository = AppUpdateRepository(application.applicationContext)
+    private val repository = AppUpdateRepository(
+        application.applicationContext,
+        PlayCatalog(authProvider)
+    )
     private val googlePlayInstaller = GooglePlayInstaller(application.applicationContext, authProvider)
     private val bundleInstaller = BundleInstaller(application.applicationContext)
     private val _uiState = MutableStateFlow(UpdaterUiState())

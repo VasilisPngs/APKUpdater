@@ -15,5 +15,6 @@ data class AppUpdateInfo(
     val newVersionName: String,
     val newVersionCode: Long,
     val publishedAt: Long?,
-    val apkMirrorUrl: String
+    val apkMirrorUrl: String,
+    val manualAvailable: Boolean
 )

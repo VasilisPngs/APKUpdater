@@ -32,7 +32,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.BottomAppBar
 import androidx.compose.material3.BottomAppBarDefaults
-import androidx.compose.material3.Card
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.CircularProgressIndicator
@@ -68,7 +68,6 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
@@ -97,6 +96,7 @@ import com.android.gupdater.data.repository.ScanStatus
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.text.NumberFormat
 
 private val APP_ICON_SIZE = 56.dp
 private const val MAX_VERSION_CODE_DIGITS = 19
@@ -336,6 +336,7 @@ private fun AppListItem(
     val coroutineScope = rememberCoroutineScope()
     val copyLabel = stringResource(R.string.copy_version_code)
     var manualVisible by rememberSaveable { mutableStateOf(false) }
+    val percentFormat = remember { NumberFormat.getPercentInstance() }
     val iconSizePx = with(LocalDensity.current) { APP_ICON_SIZE.roundToPx() }
     val iconBitmap by produceState<Bitmap?>(initialValue = null, key1 = app.packageName) {
         value = withContext(Dispatchers.IO) {
@@ -409,27 +410,20 @@ private fun AppListItem(
                 horizontalArrangement = Arrangement.End,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                FilledTonalButton(onClick = { manualVisible = true }) {
-                    Box(contentAlignment = Alignment.Center) {
-                        Text(
-                            text = stringResource(R.string.manual),
-                            modifier = Modifier.alpha(if (installState == null) 1f else 0f)
-                        )
-                        when (installState) {
-                            null -> Unit
-                            is InstallState.Downloading -> CircularProgressIndicator(
-                                progress = { installState.progress },
-                                modifier = Modifier.size(20.dp),
-                                strokeWidth = 2.dp
-                            )
-                            else -> CircularProgressIndicator(
-                                modifier = Modifier.size(20.dp),
-                                strokeWidth = 2.dp
-                            )
+                if (update.manualAvailable) {
+                    FilledTonalButton(
+                        enabled = installState == null,
+                        onClick = { manualVisible = true }
+                    ) {
+                        Text(stringResource(R.string.manual))
+                        val downloading = installState as? InstallState.Downloading
+                        if (downloading != null) {
+                            Spacer(Modifier.width(ButtonDefaults.IconSpacing))
+                            Text(percentFormat.format(downloading.progress))
                         }
                     }
+                    Spacer(Modifier.width(8.dp))
                 }
-                Spacer(Modifier.width(8.dp))
                 FilledTonalButton(onClick = { openUrlInBrowser(context, update.apkMirrorUrl) }) {
                     Text(stringResource(R.string.apkmirror))
                 }

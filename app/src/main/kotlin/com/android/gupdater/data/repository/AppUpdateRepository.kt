@@ -12,6 +12,7 @@ import com.android.gupdater.data.model.ApkMirrorApk
 import com.android.gupdater.data.model.ApkMirrorApp
 import com.android.gupdater.data.model.AppUpdateInfo
 import com.android.gupdater.data.model.InstalledApp
+import com.android.gupdater.data.play.PlayCatalog
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
@@ -36,6 +37,7 @@ sealed interface ScanStatus {
 
 class AppUpdateRepository(
     context: Context,
+    private val playCatalog: PlayCatalog,
     private val client: ApkMirrorClient = ApkMirrorClient()
 ) {
     private val packageManager = context.packageManager
@@ -66,8 +68,14 @@ class AppUpdateRepository(
 
         emit(ScanStatus.Scanning)
 
-        val results = coroutineScope {
-            batches.map { batch ->
+        val play: Result<Set<String>>
+        val results: List<Result<List<AppUpdateInfo>>>
+
+        coroutineScope {
+            val deliverable = async {
+                runCatching { playCatalog.deliverablePackages(appsToCheck.map(InstalledApp::packageName)) }
+            }
+            results = batches.map { batch ->
                 async {
                     try {
                         val apps = client.appExists(batch.map(InstalledApp::packageName))
@@ -79,20 +87,28 @@ class AppUpdateRepository(
                     }
                 }
             }.awaitAll()
+            play = deliverable.await()
         }
 
+        val deliverable = play.getOrNull().orEmpty()
         val updates = results.mapNotNull(Result<List<AppUpdateInfo>>::getOrNull)
             .flatten()
+            .map { it.copy(manualAvailable = it.packageName in deliverable) }
             .sortedWith(NEWEST_FIRST)
         val failedBatches = results.count(Result<List<AppUpdateInfo>>::isFailure)
-        val failure = results.firstNotNullOfOrNull { it.exceptionOrNull() }?.let(::reason)
+        val apkMirrorFailure = results.firstNotNullOfOrNull { it.exceptionOrNull() }?.let(::reason)
+        val failures = buildList {
+            when {
+                failedBatches == batches.size -> add("APKMirror: $apkMirrorFailure")
+                failedBatches > 0 -> add("Some applications were not checked on APKMirror: $apkMirrorFailure")
+            }
+            play.exceptionOrNull()?.let { add("Google Play: ${reason(it)}") }
+        }
 
-        when {
-            failedBatches == 0 -> emit(ScanStatus.Success(updates))
-            failedBatches == batches.size -> emit(ScanStatus.Error("APKMirror: $failure", updates))
-            else -> emit(
-                ScanStatus.Error("Some applications were not checked on APKMirror: $failure", updates)
-            )
+        if (failures.isEmpty()) {
+            emit(ScanStatus.Success(updates))
+        } else {
+            emit(ScanStatus.Error(failures.joinToString(" "), updates))
         }
     }.flowOn(Dispatchers.IO)
 
@@ -122,7 +138,8 @@ class AppUpdateRepository(
                 newVersionName = app.versionName,
                 newVersionCode = apk.versionCode,
                 publishedAt = publishedAt(apk.publishDate.ifBlank { app.publishDate }),
-                apkMirrorUrl = apk.link.toAbsoluteApkMirrorUrl()
+                apkMirrorUrl = apk.link.toAbsoluteApkMirrorUrl(),
+                manualAvailable = false
             )
         }
     }
