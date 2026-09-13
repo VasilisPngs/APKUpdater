@@ -1,16 +1,13 @@
 package com.android.apkupdater.ui
 
-import android.content.ClipData
 import android.content.Context
 import android.content.Intent
-import android.graphics.Bitmap
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
-import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -68,8 +65,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.ClipEntry
-import androidx.compose.ui.platform.LocalClipboard
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
@@ -78,7 +73,6 @@ import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.core.graphics.drawable.toBitmap
 import androidx.core.net.toUri
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.android.apkupdater.R
@@ -265,9 +259,6 @@ private fun HomeContent(
     onScan: () -> Unit
 ) {
     val layoutDirection = LocalLayoutDirection.current
-    val fileInstalls = remember(installs, updates) {
-        installs.filterKeys { key -> updates.none { (app, _) -> app.packageName == key } }.values.toList()
-    }
 
     PullToRefreshBox(
         isRefreshing = false,
@@ -281,7 +272,7 @@ private fun HomeContent(
         Column(modifier = Modifier.fillMaxSize()) {
             ScanStatusLine(isScanning = isScanning, found = updates.size)
 
-            fileInstalls.forEach { state ->
+            installs.values.forEach { state ->
                 RoundedSection {
                     ListItem(
                         colors = ListItemDefaults.colors(containerColor = Color.Transparent),
@@ -337,16 +328,12 @@ private fun AppListItem(
     update: AppUpdateInfo
 ) {
     val context = LocalContext.current
-    val clipboard = LocalClipboard.current
-    val coroutineScope = rememberCoroutineScope()
-    val copyLabel = stringResource(R.string.copy_version_code)
     val iconSizePx = with(LocalDensity.current) { APP_ICON_SIZE.roundToPx() }
-    val iconBitmap by produceState<Bitmap?>(initialValue = null, key1 = app.packageName) {
-        value = withContext(Dispatchers.IO) {
-            runCatching {
-                context.packageManager.getApplicationIcon(app.packageName)
-                    .toBitmap(iconSizePx, iconSizePx)
-            }.getOrNull()
+    val iconBitmap by produceState(AppIconCache.peek(app.packageName), app.packageName) {
+        if (value == null) {
+            value = withContext(Dispatchers.IO) {
+                AppIconCache.load(context, app.packageName, iconSizePx)
+            }
         }
     }
 
@@ -387,23 +374,7 @@ private fun AppListItem(
                             update.newVersionName,
                             update.newVersionCode
                         ),
-                        style = MaterialTheme.typography.bodyLarge,
-                        modifier = Modifier.combinedClickable(
-                            onLongClickLabel = copyLabel,
-                            onLongClick = {
-                                coroutineScope.launch {
-                                    clipboard.setClipEntry(
-                                        ClipEntry(
-                                            ClipData.newPlainText(
-                                                copyLabel,
-                                                update.newVersionCode.toString()
-                                            )
-                                        )
-                                    )
-                                }
-                            },
-                            onClick = {}
-                        )
+                        style = MaterialTheme.typography.bodyLarge
                     )
                 }
             }

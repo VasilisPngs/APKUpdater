@@ -74,12 +74,15 @@ class ApkUpdaterViewModel(application: Application) : AndroidViewModel(applicati
             val appsToCheck = allApps.filter { state.includeDisabledApps || it.isEnabled }
 
             repository.scanForUpdates(appsToCheck).collect { status ->
-                val updates = when (status) {
-                    ScanStatus.Scanning -> emptyList()
-                    is ScanStatus.Success -> status.updates
-                    is ScanStatus.Error -> status.partialUpdates
+                _uiState.update { current ->
+                    when (status) {
+                        ScanStatus.Scanning -> current.copy(scanStatus = status)
+                        is ScanStatus.Success ->
+                            current.copy(scanStatus = status, updates = status.updates)
+                        is ScanStatus.Error ->
+                            current.copy(scanStatus = status, updates = status.partialUpdates)
+                    }
                 }
-                _uiState.update { it.copy(scanStatus = status, updates = updates) }
             }
         }
     }

@@ -111,7 +111,7 @@ class AppUpdateRepository(
             AppUpdateInfo(
                 packageName = installed.packageName,
                 appName = packageManager.appLabel(installed.packageName),
-                newVersionName = apk.versionName.ifBlank { app.versionName },
+                newVersionName = app.versionName,
                 newVersionCode = apk.versionCode,
                 publishedAt = publishedAt(apk.publishDate.ifBlank { app.publishDate }),
                 apkMirrorUrl = apk.link.toAbsoluteApkMirrorUrl()
