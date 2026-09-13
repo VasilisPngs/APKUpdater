@@ -369,11 +369,11 @@ private fun AppListItem(
                     )
                     Spacer(Modifier.height(4.dp))
                     Text(
-                        text = stringResource(R.string.version_latest, update.newVersionName),
-                        style = MaterialTheme.typography.bodyLarge
-                    )
-                    Text(
-                        text = update.newVersionCode.toString(),
+                        text = stringResource(
+                            R.string.version_latest,
+                            update.newVersionName,
+                            update.newVersionCode
+                        ),
                         style = MaterialTheme.typography.bodyLarge
                     )
                 }
