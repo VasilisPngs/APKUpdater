@@ -113,7 +113,6 @@ class AppUpdateRepository(
                 appName = packageManager.appLabel(installed.packageName),
                 newVersionName = app.versionName,
                 newVersionCode = apk.versionCode,
-                variant = variantLabel(apk),
                 publishedAt = publishedAt(apk.publishDate.ifBlank { app.publishDate }),
                 apkMirrorUrl = apk.link.toAbsoluteApkMirrorUrl()
             )
@@ -139,21 +138,6 @@ class AppUpdateRepository(
                     .thenByDescending(ApkMirrorApk::versionCode)
             )
     }
-
-    private fun variantLabel(apk: ApkMirrorApk): String = (
-        apk.architectures +
-            listOfNotNull(apiLabel(apk.minimumApi)) +
-            apk.densities.map(::densityLabel)
-        ).joinToString(", ")
-
-    private fun apiLabel(minimumApi: Int): String? {
-        if (minimumApi <= 0) return null
-        val release = ANDROID_RELEASES[minimumApi] ?: return "API $minimumApi"
-        return "Android $release+"
-    }
-
-    private fun densityLabel(density: String): String =
-        if (density.toIntOrNull() == null) density else "${density}dpi"
 
     private fun abiRank(apk: ApkMirrorApk): Int {
         if (apk.architectures.isEmpty()) return universalAbiRank
@@ -272,11 +256,6 @@ class AppUpdateRepository(
             (PackageManager.GET_SIGNING_CERTIFICATES or PackageManager.MATCH_DISABLED_COMPONENTS).toLong()
         )
         val UNIVERSAL_ARCHITECTURES = setOf("universal", "noarch")
-        val ANDROID_RELEASES = mapOf(
-            21 to "5.0", 22 to "5.1", 23 to "6.0", 24 to "7.0", 25 to "7.1",
-            26 to "8.0", 27 to "8.1", 28 to "9", 29 to "10", 30 to "11",
-            31 to "12", 32 to "12L", 33 to "13", 34 to "14", 35 to "15", 36 to "16"
-        )
         val DENSITY_BUCKETS = listOf(
             DisplayMetrics.DENSITY_LOW,
             DisplayMetrics.DENSITY_MEDIUM,
