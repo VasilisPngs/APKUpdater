@@ -40,7 +40,7 @@
 - State and Jetpack Compose: https://developer.android.com/develop/ui/compose/state
 - Side effects in Compose: https://developer.android.com/develop/ui/compose/side-effects
 - Lazy lists and grids: https://developer.android.com/develop/ui/compose/lists
-- Animations in Compose: https://developer.android.com/develop/ui/compose/animation/introduction
+- Animations in Compose: https://developer.android.com/develop/ui/compose/animation/quick-guide
 - Adaptive apps: https://developer.android.com/develop/ui/compose/layouts/adaptive/get-started-with-adaptive-apps
 - Support different display sizes: https://developer.android.com/develop/ui/compose/layouts/adaptive/support-different-display-sizes
 - Dynamic color: https://developer.android.com/develop/ui/views/theming/dynamic-colors
@@ -73,7 +73,7 @@
 - Version catalogs: https://developer.android.com/build/migrate-to-catalogs
 - App optimization with R8: https://developer.android.com/topic/performance/app-optimization/enable-app-optimization
 - Sign your app: https://developer.android.com/studio/publish/app-signing
-- Android releases: https://developer.android.com/about/versions
+- Platform and API versions: https://developer.android.com/tools/releases/platforms
 - Latest Android developer updates: https://developer.android.com/latest-updates
 - AndroidX releases: https://developer.android.com/jetpack/androidx/versions
 - Compose releases: https://developer.android.com/jetpack/androidx/releases/compose
