@@ -17,19 +17,14 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.calculateEndPadding
 import androidx.compose.foundation.layout.calculateStartPadding
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
@@ -167,39 +162,33 @@ fun ApkUpdaterScreen(
             .fillMaxSize()
             .nestedScroll(bottomBarScrollBehavior.nestedScrollConnection),
         topBar = {
-            Column(modifier = Modifier.background(BottomAppBarDefaults.containerColor)) {
-                CenterAlignedTopAppBar(
-                    colors = TopAppBarDefaults.topAppBarColors(
-                        containerColor = BottomAppBarDefaults.containerColor
-                    ),
-                    title = { Text(stringResource(R.string.app_name)) },
-                    actions = {
-                        IconButton(onClick = { menuExpanded = true }) {
-                            Icon(
-                                painter = painterResource(R.drawable.ic_more_vert),
-                                contentDescription = stringResource(R.string.more_options)
-                            )
-                        }
-                        DropdownMenu(
-                            expanded = menuExpanded,
-                            onDismissRequest = { menuExpanded = false },
-                            shape = MaterialTheme.shapes.extraLarge
-                        ) {
-                            DropdownMenuItem(
-                                text = { Text(stringResource(R.string.install_bundle)) },
-                                onClick = {
-                                    menuExpanded = false
-                                    bundlePicker.launch(arrayOf("*/*"))
-                                }
-                            )
-                        }
+            CenterAlignedTopAppBar(
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = BottomAppBarDefaults.containerColor
+                ),
+                title = { Text(stringResource(R.string.app_name)) },
+                actions = {
+                    IconButton(onClick = { menuExpanded = true }) {
+                        Icon(
+                            painter = painterResource(R.drawable.ic_more_vert),
+                            contentDescription = stringResource(R.string.more_options)
+                        )
                     }
-                )
-                ScanStatusLine(
-                    isScanning = uiState.scanStatus == ScanStatus.Scanning,
-                    found = updates.size
-                )
-            }
+                    DropdownMenu(
+                        expanded = menuExpanded,
+                        onDismissRequest = { menuExpanded = false },
+                        shape = MaterialTheme.shapes.extraLarge
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.install_bundle)) },
+                            onClick = {
+                                menuExpanded = false
+                                bundlePicker.launch(arrayOf("*/*"))
+                            }
+                        )
+                    }
+                }
+            )
         },
         bottomBar = {
             BottomAppBar(
@@ -264,8 +253,8 @@ private fun ScanStatusLine(isScanning: Boolean, found: Int) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal))
-            .padding(start = 16.dp, end = 16.dp, bottom = 12.dp),
+            .background(BottomAppBarDefaults.containerColor)
+            .padding(horizontal = 16.dp, vertical = 12.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -310,6 +299,8 @@ private fun HomeContent(
         )
     ) {
         Column(modifier = Modifier.fillMaxSize()) {
+            ScanStatusLine(isScanning = isScanning, found = updates.size)
+
             fileInstalls.forEach { state ->
                 RoundedSection {
                     ListItem(
