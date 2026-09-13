@@ -1,13 +1,13 @@
-package com.android.gupdater.data.installer
+package com.android.apkupdater.data.installer
 
 import android.content.Context
 import android.content.pm.PackageManager
 import android.util.Base64
-import com.android.gupdater.data.api.SharedHttpClient
-import com.android.gupdater.data.appLabel
-import com.android.gupdater.data.model.InstallState
-import com.android.gupdater.data.model.InstalledApp
-import com.android.gupdater.data.play.PlayAuthProvider
+import com.android.apkupdater.data.api.SharedHttpClient
+import com.android.apkupdater.data.appLabel
+import com.android.apkupdater.data.model.InstallState
+import com.android.apkupdater.data.model.InstalledApp
+import com.android.apkupdater.data.play.PlayAuthProvider
 import com.aurora.gplayapi.data.models.App
 import com.aurora.gplayapi.data.models.AuthData
 import com.aurora.gplayapi.data.models.PlayFile
@@ -78,25 +78,16 @@ class GooglePlayInstaller(
         versionCode: Long,
         offerType: Int
     ): List<PlayFile> {
-        val files = try {
-            PurchaseHelper(session.authData).purchase(
-                packageName = packageName,
-                versionCode = versionCode,
-                offerType = offerType,
-                certificateHash = certificateHash(packageName)
-            )
-        } catch (exception: CancellationException) {
-            throw exception
-        } catch (exception: Exception) {
-            throw IllegalStateException(unavailable(packageName, versionCode), exception)
-        }.filter { it.type == PlayFile.Type.BASE || it.type == PlayFile.Type.SPLIT }
+        val files = PurchaseHelper(session.authData).purchase(
+            packageName = packageName,
+            versionCode = versionCode,
+            offerType = offerType,
+            certificateHash = certificateHash(packageName)
+        ).filter { it.type == PlayFile.Type.BASE || it.type == PlayFile.Type.SPLIT }
 
-        require(files.isNotEmpty()) { unavailable(packageName, versionCode) }
+        require(files.isNotEmpty()) { "Google Play returned no installable file." }
         return files
     }
-
-    private fun unavailable(packageName: String, versionCode: Long): String =
-        "Google Play has no version code $versionCode for $packageName."
 
 
     private fun download(

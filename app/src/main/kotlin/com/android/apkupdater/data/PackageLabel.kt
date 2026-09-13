@@ -1,4 +1,4 @@
-package com.android.gupdater.data
+package com.android.apkupdater.data
 
 import android.content.pm.PackageManager
 

@@ -1,7 +1,8 @@
-package com.android.gupdater.data.play
+package com.android.apkupdater.data.play
 
 import android.app.ActivityManager
 import android.content.Context
+import android.content.pm.PackageManager
 import android.content.res.Configuration
 import android.opengl.EGL14
 import android.opengl.EGLConfig
@@ -12,9 +13,11 @@ import java.util.Properties
 
 object PlayDeviceProperties {
 
-    private const val GSF_VERSION = "203019037"
-    private const val VENDING_VERSION = "82151710"
-    private const val VENDING_VERSION_STRING = "21.5.17-21 [0] [PR] 326734551"
+    private const val SERVICES_PACKAGE = "com.google.android.gms"
+    private const val STORE_PACKAGE = "com.android.vending"
+    private const val SERVICES_FALLBACK = "203615037"
+    private const val STORE_FALLBACK = "82201710"
+    private const val STORE_NAME_FALLBACK = "22.0.17-21 [0] [PR] 332555730"
 
     fun build(context: Context): Properties {
         val configuration = context.resources.configuration
@@ -75,10 +78,16 @@ object PlayDeviceProperties {
             )
             setProperty("GL.Extensions", glExtensions().joinToString(separator = ","))
 
+            val store = packageManager.installed(STORE_PACKAGE)
+
             setProperty("Client", "android-google")
-            setProperty("GSF.version", GSF_VERSION)
-            setProperty("Vending.version", VENDING_VERSION)
-            setProperty("Vending.versionString", VENDING_VERSION_STRING)
+            setProperty(
+                "GSF.version",
+                packageManager.installed(SERVICES_PACKAGE)?.longVersionCode?.toString()
+                    ?: SERVICES_FALLBACK
+            )
+            setProperty("Vending.version", store?.longVersionCode?.toString() ?: STORE_FALLBACK)
+            setProperty("Vending.versionString", store?.versionName ?: STORE_NAME_FALLBACK)
 
             setProperty("Roaming", "mobile-notroaming")
             setProperty("TimeZone", "UTC-10")
@@ -86,6 +95,10 @@ object PlayDeviceProperties {
             setProperty("SimOperator", "38")
         }
     }
+
+    private fun PackageManager.installed(packageName: String) = runCatching {
+        getPackageInfo(packageName, PackageManager.PackageInfoFlags.of(0))
+    }.getOrNull()
 
     private fun locales(context: Context): List<String> {
         val configured = context.resources.configuration.locales

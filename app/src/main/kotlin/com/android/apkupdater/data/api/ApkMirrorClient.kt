@@ -1,7 +1,7 @@
-package com.android.gupdater.data.api
+package com.android.apkupdater.data.api
 
-import com.android.gupdater.data.model.ApkMirrorApk
-import com.android.gupdater.data.model.ApkMirrorApp
+import com.android.apkupdater.data.model.ApkMirrorApk
+import com.android.apkupdater.data.model.ApkMirrorApp
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
@@ -9,7 +9,7 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.io.IOException
 
-class ApkMirrorClient {
+class ApkMirrorClient(private val userAgent: String) {
 
     fun appExists(packageNames: List<String>): List<ApkMirrorApp> {
         val payload = JSONObject()
@@ -19,7 +19,7 @@ class ApkMirrorClient {
 
         val request = Request.Builder()
             .url(APP_EXISTS_URL)
-            .header("User-Agent", USER_AGENT)
+            .header("User-Agent", userAgent)
             .header("Authorization", AUTHORIZATION)
             .post(payload.toRequestBody(JSON_MEDIA_TYPE))
             .build()
@@ -78,7 +78,6 @@ class ApkMirrorClient {
 
     private companion object {
         const val APP_EXISTS_URL = "https://www.apkmirror.com/wp-json/apkm/v1/app_exists/"
-        const val USER_AGENT = "com.android.gupdater"
         const val AUTHORIZATION = "Basic YXBpLWFwa3VwZGF0ZXI6cm01cmNmcnVVakt5MDRzTXB5TVBKWFc4"
         val EXCLUDED_CHANNELS = listOf("alpha", "beta")
         val JSON_MEDIA_TYPE = "application/json".toMediaType()

@@ -1,4 +1,4 @@
-package com.android.gupdater.ui
+package com.android.apkupdater.ui
 
 import android.content.ClipData
 import android.content.Context
@@ -88,11 +88,11 @@ import androidx.compose.ui.unit.dp
 import androidx.core.graphics.drawable.toBitmap
 import androidx.core.net.toUri
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.android.gupdater.R
-import com.android.gupdater.data.model.AppUpdateInfo
-import com.android.gupdater.data.model.InstallState
-import com.android.gupdater.data.model.InstalledApp
-import com.android.gupdater.data.repository.ScanStatus
+import com.android.apkupdater.R
+import com.android.apkupdater.data.model.AppUpdateInfo
+import com.android.apkupdater.data.model.InstallState
+import com.android.apkupdater.data.model.InstalledApp
+import com.android.apkupdater.data.repository.ScanStatus
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -108,8 +108,8 @@ private enum class AppTab(val labelRes: Int, val iconRes: Int, val selectedIconR
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun GUpdaterScreen(
-    viewModel: GUpdaterViewModel,
+fun ApkUpdaterScreen(
+    viewModel: ApkUpdaterViewModel,
     modifier: Modifier = Modifier
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()

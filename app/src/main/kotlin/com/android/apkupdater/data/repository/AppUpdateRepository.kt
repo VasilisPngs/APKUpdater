@@ -1,4 +1,4 @@
-package com.android.gupdater.data.repository
+package com.android.apkupdater.data.repository
 
 import android.content.Context
 import android.content.pm.PackageInfo
@@ -6,13 +6,14 @@ import android.content.pm.PackageManager
 import android.content.pm.Signature
 import android.content.pm.SigningInfo
 import android.os.Build
-import com.android.gupdater.data.api.ApkMirrorClient
-import com.android.gupdater.data.appLabel
-import com.android.gupdater.data.model.ApkMirrorApk
-import com.android.gupdater.data.model.ApkMirrorApp
-import com.android.gupdater.data.model.AppUpdateInfo
-import com.android.gupdater.data.model.InstalledApp
-import com.android.gupdater.data.play.PlayCatalog
+import android.util.DisplayMetrics
+import com.android.apkupdater.data.api.ApkMirrorClient
+import com.android.apkupdater.data.appLabel
+import com.android.apkupdater.data.model.ApkMirrorApk
+import com.android.apkupdater.data.model.ApkMirrorApp
+import com.android.apkupdater.data.model.AppUpdateInfo
+import com.android.apkupdater.data.model.InstalledApp
+import com.android.apkupdater.data.play.PlayCatalog
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
@@ -38,7 +39,7 @@ sealed interface ScanStatus {
 class AppUpdateRepository(
     context: Context,
     private val playCatalog: PlayCatalog,
-    private val client: ApkMirrorClient = ApkMirrorClient()
+    private val client: ApkMirrorClient = ApkMirrorClient(context.packageName)
 ) {
     private val packageManager = context.packageManager
     private val isAndroidTv = packageManager.hasSystemFeature(PackageManager.FEATURE_LEANBACK)
@@ -115,9 +116,6 @@ class AppUpdateRepository(
     private fun reason(exception: Throwable): String =
         exception.message?.takeIf(String::isNotBlank) ?: exception::class.simpleName.orEmpty()
 
-    private fun isGoogleApp(developerName: String): Boolean =
-        developerName.contains(GOOGLE_DEVELOPER, ignoreCase = true)
-
     private fun parseUpdates(
         apps: List<ApkMirrorApp>,
         installedBatch: List<InstalledApp>
@@ -126,7 +124,6 @@ class AppUpdateRepository(
 
         return apps.mapNotNull { app ->
             val installed = installedByPackage[app.packageName] ?: return@mapNotNull null
-            if (!isGoogleApp(app.developerName)) return@mapNotNull null
             if (!isStableRelease(app.packageName)) return@mapNotNull null
             if (!isStableRelease(app.versionName)) return@mapNotNull null
 
@@ -268,7 +265,6 @@ class AppUpdateRepository(
         const val APKMIRROR_URL = "https://www.apkmirror.com"
         const val APKMIRROR_PATH_PREFIX = "/apk/"
         const val NO_DENSITY = "nodpi"
-        const val GOOGLE_DEVELOPER = "Google"
         const val WEAR_STANDALONE = "wear_standalone"
         const val LEANBACK = "leanback"
         const val LEANBACK_STANDALONE = "leanback_standalone"
@@ -282,8 +278,19 @@ class AppUpdateRepository(
             (PackageManager.GET_SIGNING_CERTIFICATES or PackageManager.MATCH_DISABLED_COMPONENTS).toLong()
         )
         val UNIVERSAL_ARCHITECTURES = setOf("universal", "noarch")
-        val DENSITY_BUCKETS = listOf(120, 160, 213, 240, 320, 480, 640)
+        val DENSITY_BUCKETS = listOf(
+            DisplayMetrics.DENSITY_LOW,
+            DisplayMetrics.DENSITY_MEDIUM,
+            DisplayMetrics.DENSITY_TV,
+            DisplayMetrics.DENSITY_HIGH,
+            DisplayMetrics.DENSITY_XHIGH,
+            DisplayMetrics.DENSITY_XXHIGH,
+            DisplayMetrics.DENSITY_XXXHIGH
+        )
         val PRE_RELEASE_MARKER_PATTERN =
-            Regex("(?:^|[^a-z])(alpha|beta|canary|dev)(?:[^a-z]|$)", RegexOption.IGNORE_CASE)
+            Regex(
+                "(?:^|[^a-z])(alpha|beta|rc|canary|dev|preview)(?:[^a-z]|$)",
+                RegexOption.IGNORE_CASE
+            )
     }
 }

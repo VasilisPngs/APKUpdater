@@ -1,7 +1,7 @@
-package com.android.gupdater.data.play
+package com.android.apkupdater.data.play
 
 import android.content.Context
-import com.android.gupdater.data.api.SharedHttpClient
+import com.android.apkupdater.data.api.SharedHttpClient
 import com.aurora.gplayapi.data.models.AuthData
 import com.aurora.gplayapi.helpers.AuthHelper
 import okhttp3.MediaType.Companion.toMediaType
@@ -42,7 +42,7 @@ class PlayAuthProvider(private val context: Context) {
 
         val request = Request.Builder()
             .url(DISPENSER_URL)
-            .header("User-Agent", USER_AGENT)
+            .header("User-Agent", context.packageName)
             .post(payload.toRequestBody(JSON_MEDIA_TYPE))
             .build()
 
@@ -76,7 +76,6 @@ class PlayAuthProvider(private val context: Context) {
     }
 
     private companion object {
-        const val USER_AGENT = "com.android.gupdater"
         const val DISPENSER_HOST = "auroraoss.com"
         const val DISPENSER_URL = "https://auroraoss.com/api/auth/"
         val JSON_MEDIA_TYPE = "application/json".toMediaType()
