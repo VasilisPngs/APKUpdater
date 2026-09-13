@@ -93,7 +93,6 @@ fun GUpdaterScreen(
     viewModel: GUpdaterViewModel,
     modifier: Modifier = Modifier
 ) {
-    val context = LocalContext.current
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     var selectedTab by rememberSaveable { mutableStateOf(AppTab.Home) }
     var menuExpanded by remember { mutableStateOf(false) }
@@ -105,12 +104,15 @@ fun GUpdaterScreen(
     }
     val bottomBarScrollBehavior = BottomAppBarDefaults.exitAlwaysScrollBehavior()
 
+    val installedFormat = stringResource(R.string.update_installed)
+    val failedFormat = stringResource(R.string.update_failed)
+
     LaunchedEffect(Unit) {
         viewModel.events.collect { event ->
             snackbarHostState.showSnackbar(
                 message = when (event) {
-                    is InstallEvent.Finished -> context.getString(R.string.update_installed, event.appName)
-                    is InstallEvent.Failed -> context.getString(R.string.update_failed, event.message)
+                    is InstallEvent.Finished -> installedFormat.format(event.appName)
+                    is InstallEvent.Failed -> failedFormat.format(event.message)
                 },
                 duration = when (event) {
                     is InstallEvent.Finished -> SnackbarDuration.Short

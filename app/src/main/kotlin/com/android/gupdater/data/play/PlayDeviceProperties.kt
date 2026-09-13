@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.res.Configuration
 import android.opengl.EGL14
 import android.opengl.EGLConfig
+import android.opengl.EGLDisplay
 import android.opengl.GLES20
 import android.os.Build
 import java.util.Properties
@@ -119,7 +120,7 @@ object PlayDeviceProperties {
         }
     }
 
-    private fun readExtensions(display: android.opengl.EGLDisplay, config: EGLConfig): List<String> {
+    private fun readExtensions(display: EGLDisplay, config: EGLConfig): List<String> {
         val context = EGL14.eglCreateContext(
             display,
             config,

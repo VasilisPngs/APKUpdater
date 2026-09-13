@@ -25,7 +25,6 @@ class BundleInstaller(private val context: Context) {
                 onState(InstallState.Installing(label))
                 copyToCache(uri, archive)
 
-                onState(InstallState.Installing(label))
                 ZipFile(archive).use { zip ->
                     packageInstaller.install(sources(zip, archive)).getOrThrow()
                 }

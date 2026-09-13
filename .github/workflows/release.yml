@@ -12,11 +12,9 @@ permissions:
   contents: write
 
 jobs:
-  verify:
-    name: Verify
+  release:
+    name: Release
     runs-on: ubuntu-latest
-    outputs:
-      release_ready: ${{ steps.release-check.outputs.ready }}
 
     steps:
       - name: Checkout repository
@@ -26,16 +24,10 @@ jobs:
         uses: actions/setup-java@v6
         with:
           distribution: temurin
-          java-version: '25.0.4.1'
-
-      - name: Verify JDK version
-        run: java -version
+          java-version: '25'
 
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v6
-
-      - name: Grant execute permission for gradlew
-        run: chmod +x gradlew
 
       - name: Lint release
         run: ./gradlew :app:lintRelease --no-daemon
@@ -51,32 +43,8 @@ jobs:
             echo "ready=false" >> "$GITHUB_OUTPUT"
           fi
 
-  release:
-    name: Release
-    needs: verify
-    if: ${{ needs.verify.outputs.release_ready == 'true' }}
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v7
-
-      - name: Set up JDK
-        uses: actions/setup-java@v6
-        with:
-          distribution: temurin
-          java-version: '25.0.4.1'
-
-      - name: Verify JDK version
-        run: java -version
-
-      - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v6
-
-      - name: Grant execute permission for gradlew
-        run: chmod +x gradlew
-
       - name: Prepare release keystore
+        if: ${{ steps.release-check.outputs.ready == 'true' }}
         env:
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
         run: |
@@ -87,12 +55,14 @@ jobs:
           test -s release.keystore
 
       - name: Build release APK
+        if: ${{ steps.release-check.outputs.ready == 'true' }}
         env:
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
         run: ./gradlew :app:assembleRelease --no-daemon
 
       - name: Publish release
+        if: ${{ steps.release-check.outputs.ready == 'true' }}
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG_NAME: GUpdater
