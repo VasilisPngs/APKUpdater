@@ -82,9 +82,9 @@ import kotlinx.coroutines.withContext
 
 private val APP_ICON_SIZE = 56.dp
 
-private enum class AppTab(val labelRes: Int, val iconRes: Int) {
-    Home(R.string.home, R.drawable.ic_home),
-    Settings(R.string.settings, R.drawable.ic_settings)
+private enum class AppTab(val labelRes: Int, val iconRes: Int, val selectedIconRes: Int) {
+    Home(R.string.home, R.drawable.ic_home, R.drawable.ic_home_filled),
+    Settings(R.string.settings, R.drawable.ic_settings, R.drawable.ic_settings_filled)
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -170,11 +170,12 @@ fun GUpdaterScreen(
                 contentPadding = PaddingValues(0.dp)
             ) {
                 AppTab.entries.forEach { tab ->
+                    val selected = selectedTab == tab
                     NavigationBarItem(
-                        selected = selectedTab == tab,
+                        selected = selected,
                         onClick = {
                             when {
-                                selectedTab != tab -> selectedTab = tab
+                                !selected -> selectedTab = tab
                                 tab != AppTab.Home -> Unit
                                 homeListState.canScrollBackward ->
                                     coroutineScope.launch { homeListState.animateScrollToItem(0) }
@@ -183,7 +184,9 @@ fun GUpdaterScreen(
                         },
                         icon = {
                             Icon(
-                                painter = painterResource(tab.iconRes),
+                                painter = painterResource(
+                                    if (selected) tab.selectedIconRes else tab.iconRes
+                                ),
                                 contentDescription = stringResource(tab.labelRes)
                             )
                         },
