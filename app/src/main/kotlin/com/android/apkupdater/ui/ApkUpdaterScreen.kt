@@ -200,7 +200,7 @@ fun ApkUpdaterScreen(
                     .fillMaxWidth()
                     .onSizeChanged { navIslandHeight = with(density) { it.height.toDp() } },
                 shape = MaterialTheme.shapes.extraLarge,
-                color = MaterialTheme.colorScheme.surfaceContainer
+                color = MaterialTheme.colorScheme.surfaceContainerHigh
             ) {
                 Row {
                     AppTab.entries.forEach { tab ->
@@ -267,7 +267,7 @@ private fun ScanStatusLine(modifier: Modifier, isScanning: Boolean, found: Int) 
     Surface(
         modifier = modifier.fillMaxWidth().padding(horizontal = 16.dp),
         shape = MaterialTheme.shapes.extraLarge,
-        color = MaterialTheme.colorScheme.surfaceContainer
+        color = MaterialTheme.colorScheme.surfaceContainerHigh
     ) {
         Row(
             modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp),
