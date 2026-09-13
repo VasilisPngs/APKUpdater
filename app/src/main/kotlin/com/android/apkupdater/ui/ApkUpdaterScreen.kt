@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.calculateEndPadding
 import androidx.compose.foundation.layout.calculateStartPadding
 import androidx.compose.foundation.layout.fillMaxSize
@@ -89,6 +90,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.core.graphics.drawable.toBitmap
 import androidx.core.net.toUri
@@ -105,6 +107,7 @@ import java.text.NumberFormat
 
 private val APP_ICON_SIZE = 56.dp
 private const val MAX_VERSION_CODE_DIGITS = 19
+private val ISLAND_GAP = 12.dp
 
 private enum class AppTab(val labelRes: Int, val iconRes: Int, val selectedIconRes: Int) {
     Home(R.string.home, R.drawable.ic_home, R.drawable.ic_home_filled),
@@ -121,6 +124,8 @@ fun ApkUpdaterScreen(
     var selectedTab by rememberSaveable { mutableStateOf(AppTab.Home) }
     var menuExpanded by remember { mutableStateOf(false) }
     val homeListState = rememberLazyListState()
+    val density = LocalDensity.current
+    var navIslandHeight by remember { mutableStateOf(0.dp) }
     val coroutineScope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
     val bundlePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
@@ -191,8 +196,9 @@ fun ApkUpdaterScreen(
             Surface(
                 modifier = Modifier
                     .windowInsetsPadding(BottomAppBarDefaults.windowInsets)
-                    .padding(start = 16.dp, end = 16.dp, bottom = 12.dp)
-                    .fillMaxWidth(),
+                    .padding(start = 16.dp, end = 16.dp, bottom = ISLAND_GAP)
+                    .fillMaxWidth()
+                    .onSizeChanged { navIslandHeight = with(density) { it.height.toDp() } },
                 shape = MaterialTheme.shapes.extraLarge,
                 color = MaterialTheme.colorScheme.surfaceContainer
             ) {
@@ -239,7 +245,8 @@ fun ApkUpdaterScreen(
                     listState = homeListState,
                     installs = uiState.installs,
                     onScan = viewModel::scanForUpdates,
-                    onManualUpdate = viewModel::installVersion
+                    onManualUpdate = viewModel::installVersion,
+                    navIslandHeight = navIslandHeight
                 )
                 AppTab.Settings -> SettingsContent(
                     modifier = Modifier.fillMaxSize().padding(innerPadding),
@@ -258,7 +265,7 @@ private fun cardColors(): CardColors =
 @Composable
 private fun ScanStatusLine(modifier: Modifier, isScanning: Boolean, found: Int) {
     Surface(
-        modifier = modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, bottom = 12.dp),
+        modifier = modifier.fillMaxWidth().padding(horizontal = 16.dp),
         shape = MaterialTheme.shapes.extraLarge,
         color = MaterialTheme.colorScheme.surfaceContainer
     ) {
@@ -292,10 +299,12 @@ private fun HomeContent(
     listState: LazyListState,
     installs: Map<String, InstallState>,
     onScan: () -> Unit,
-    onManualUpdate: (InstalledApp, Long) -> Unit
+    onManualUpdate: (InstalledApp, Long) -> Unit,
+    navIslandHeight: Dp
 ) {
     val density = LocalDensity.current
     val layoutDirection = LocalLayoutDirection.current
+    val bottomInset = BottomAppBarDefaults.windowInsets.asPaddingValues().calculateBottomPadding()
     var statusHeight by remember { mutableStateOf(0.dp) }
     val fileInstalls = remember(installs, updates) {
         installs.filterKeys { key -> updates.none { (app, _) -> app.packageName == key } }.values.toList()
@@ -304,9 +313,9 @@ private fun HomeContent(
     Box(
         modifier = modifier.padding(
             start = contentPadding.calculateStartPadding(layoutDirection),
-            top = contentPadding.calculateTopPadding(),
+            top = contentPadding.calculateTopPadding() + ISLAND_GAP,
             end = contentPadding.calculateEndPadding(layoutDirection),
-            bottom = contentPadding.calculateBottomPadding()
+            bottom = bottomInset + ISLAND_GAP
         )
     ) {
         PullToRefreshBox(isRefreshing = false, onRefresh = onScan) {
@@ -315,9 +324,9 @@ private fun HomeContent(
                 modifier = Modifier.fillMaxSize(),
                 contentPadding = PaddingValues(
                     start = 16.dp,
-                    top = statusHeight,
+                    top = statusHeight + ISLAND_GAP,
                     end = 16.dp,
-                    bottom = 16.dp
+                    bottom = navIslandHeight + ISLAND_GAP
                 ),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
