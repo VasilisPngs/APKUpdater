@@ -175,10 +175,12 @@ fun GUpdaterScreen(
                     NavigationBarItem(
                         selected = selectedTab == tab,
                         onClick = {
-                            if (selectedTab == tab && tab == AppTab.Home) {
-                                coroutineScope.launch { homeListState.animateScrollToItem(0) }
-                            } else {
-                                selectedTabIndex = tab.ordinal
+                            when {
+                                selectedTab != tab -> selectedTabIndex = tab.ordinal
+                                tab != AppTab.Home -> Unit
+                                homeListState.canScrollBackward ->
+                                    coroutineScope.launch { homeListState.animateScrollToItem(0) }
+                                else -> viewModel.scanForUpdates()
                             }
                         },
                         icon = {
