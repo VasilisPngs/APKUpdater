@@ -140,8 +140,14 @@ class AppUpdateRepository(
             )
     }
 
-    private fun variantLabel(apk: ApkMirrorApk): String =
-        (apk.architectures + apk.densities.map(::densityLabel)).joinToString(", ")
+    private fun variantLabel(apk: ApkMirrorApk): String = (
+        apk.architectures +
+            listOfNotNull(apiLabel(apk.minimumApi)) +
+            apk.densities.map(::densityLabel)
+        ).joinToString(", ")
+
+    private fun apiLabel(minimumApi: Int): String? =
+        if (minimumApi > 0) API_PREFIX + minimumApi else null
 
     private fun densityLabel(density: String): String =
         if (density.toIntOrNull() == null) density else density + DENSITY_SUFFIX
@@ -251,6 +257,7 @@ class AppUpdateRepository(
         const val APKMIRROR_PATH_PREFIX = "/apk/"
         const val NO_DENSITY = "nodpi"
         const val DENSITY_SUFFIX = "dpi"
+        const val API_PREFIX = "API "
         const val WEAR_STANDALONE = "wear_standalone"
         const val LEANBACK = "leanback"
         const val LEANBACK_STANDALONE = "leanback_standalone"
