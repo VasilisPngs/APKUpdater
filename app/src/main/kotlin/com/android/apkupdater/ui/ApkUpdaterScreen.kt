@@ -35,6 +35,8 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.BottomAppBarDefaults
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
+import androidx.compose.material3.CardColors
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
@@ -250,6 +252,10 @@ fun ApkUpdaterScreen(
 }
 
 @Composable
+private fun cardColors(): CardColors =
+    CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer)
+
+@Composable
 private fun ScanStatusLine(modifier: Modifier, isScanning: Boolean, found: Int) {
     Surface(
         modifier = modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
@@ -315,7 +321,11 @@ private fun HomeContent(
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 items(fileInstalls, key = InstallState::appName) { state ->
-                    Card(modifier = Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.extraLarge) {
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = MaterialTheme.shapes.extraLarge,
+                        colors = cardColors()
+                    ) {
                         ListItem(
                             colors = ListItemDefaults.colors(containerColor = Color.Transparent),
                             headlineContent = {
@@ -356,7 +366,8 @@ private fun HomeContent(
 private fun RoundedSection(content: @Composable () -> Unit) {
     Card(
         modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
-        shape = MaterialTheme.shapes.extraLarge
+        shape = MaterialTheme.shapes.extraLarge,
+        colors = cardColors()
     ) {
         content()
     }
@@ -386,7 +397,11 @@ private fun AppListItem(
         }
     }
 
-    Card(modifier = modifier.fillMaxWidth(), shape = MaterialTheme.shapes.extraLarge) {
+    Card(
+        modifier = modifier.fillMaxWidth(),
+        shape = MaterialTheme.shapes.extraLarge,
+        colors = cardColors()
+    ) {
         Column(modifier = Modifier.fillMaxWidth().padding(20.dp)) {
             Row(verticalAlignment = Alignment.Top) {
                 if (iconBitmap != null) {
