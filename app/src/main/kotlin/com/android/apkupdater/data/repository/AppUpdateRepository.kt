@@ -40,7 +40,6 @@ class AppUpdateRepository(
     private val client: ApkMirrorClient = ApkMirrorClient(context.packageName)
 ) {
     private val packageManager = context.packageManager
-    private val isAndroidTv = packageManager.hasSystemFeature(PackageManager.FEATURE_LEANBACK)
     private val deviceAbis = Build.SUPPORTED_ABIS.map(String::lowercase)
     private val universalAbiRank = deviceAbis.size
     private val deviceDensityBucket = DENSITY_BUCKETS
@@ -113,39 +112,26 @@ class AppUpdateRepository(
                 appName = packageManager.appLabel(installed.packageName),
                 newVersionName = fullVersionName(apk, app.versionName),
                 newVersionCode = apk.versionCode,
-                diagnostics = diagnostics(app, apk),
                 publishedAt = publishedAt(apk.publishDate.ifBlank { app.publishDate }),
                 apkMirrorUrl = apk.link.toAbsoluteApkMirrorUrl()
             )
         }
     }
 
-    private fun bestApk(apks: List<ApkMirrorApk>, installed: InstalledApp): ApkMirrorApk? {
-        val leanbackApp = isAndroidTv && hasLeanbackLauncher(installed.packageName)
-
-        return apks
-            .asSequence()
-            .filter { it.versionCode > installed.versionCode }
-            .filter { it.minimumApi <= Build.VERSION.SDK_INT }
-            .filter { isStableLink(it.link) }
-            .filter { matchesFormFactor(it, leanbackApp) }
-            .filter { matchesSignature(it, installed) }
-            .filter { abiRank(it) != UNSUPPORTED_ABI }
-            .minWithOrNull(
-                compareBy<ApkMirrorApk> { leanbackRank(it) }
-                    .thenBy(::abiRank)
-                    .thenBy(::densityRank)
-                    .thenByDescending(ApkMirrorApk::minimumApi)
-                    .thenByDescending(ApkMirrorApk::versionCode)
-            )
-    }
-
-    private fun diagnostics(app: ApkMirrorApp, apk: ApkMirrorApk): String {
-        val tagged = app.apks.count { it.capabilities.isNotEmpty() }
-        val allCapabilities = app.apks.flatMap(ApkMirrorApk::capabilities).distinct()
-        return "n=${app.apks.size} tagged=$tagged all=$allCapabilities " +
-            "caps=${apk.capabilities} desc=\"${apk.description}\""
-    }
+    private fun bestApk(apks: List<ApkMirrorApk>, installed: InstalledApp): ApkMirrorApk? = apks
+        .asSequence()
+        .filter { it.versionCode > installed.versionCode }
+        .filter { it.minimumApi <= Build.VERSION.SDK_INT }
+        .filter { isStableLink(it.link) }
+        .filter { !it.capabilities.contains(WEAR_STANDALONE) }
+        .filter { matchesSignature(it, installed) }
+        .filter { abiRank(it) != UNSUPPORTED_ABI }
+        .minWithOrNull(
+            compareBy<ApkMirrorApk>(::abiRank)
+                .thenBy(::densityRank)
+                .thenByDescending(ApkMirrorApk::minimumApi)
+                .thenByDescending(ApkMirrorApk::versionCode)
+        )
 
     private fun fullVersionName(apk: ApkMirrorApk, releaseVersion: String): String {
         val description = apk.description.trim()
@@ -174,24 +160,6 @@ class AppUpdateRepository(
     }
 
     private fun densityBucket(density: String): Int? = density.toIntOrNull()
-
-    private fun matchesFormFactor(apk: ApkMirrorApk, leanbackApp: Boolean): Boolean {
-        if (apk.capabilities.contains(WEAR_STANDALONE)) return false
-
-        return when {
-            leanbackApp -> apk.isLeanback
-            isAndroidTv -> true
-            else -> !apk.capabilities.contains(LEANBACK_STANDALONE)
-        }
-    }
-
-    private fun leanbackRank(apk: ApkMirrorApk): Int = if (apk.isLeanback == isAndroidTv) 0 else 1
-
-    private fun hasLeanbackLauncher(packageName: String): Boolean =
-        packageManager.getLeanbackLaunchIntentForPackage(packageName) != null
-
-    private val ApkMirrorApk.isLeanback: Boolean
-        get() = capabilities.contains(LEANBACK) || capabilities.contains(LEANBACK_STANDALONE)
 
     private fun matchesSignature(apk: ApkMirrorApk, installed: InstalledApp): Boolean = when {
         apk.signatureSha256s.isNotEmpty() && installed.signatureSha256s.isNotEmpty() ->
@@ -258,8 +226,6 @@ class AppUpdateRepository(
         const val APKMIRROR_PATH_PREFIX = "/apk/"
         const val NO_DENSITY = "nodpi"
         const val WEAR_STANDALONE = "wear_standalone"
-        const val LEANBACK = "leanback"
-        const val LEANBACK_STANDALONE = "leanback_standalone"
         val NEWEST_FIRST = compareByDescending<AppUpdateInfo> { it.publishedAt ?: Long.MIN_VALUE }
             .thenBy { it.appName.lowercase(Locale.ROOT) }
         const val UNSUPPORTED_ABI = Int.MAX_VALUE
