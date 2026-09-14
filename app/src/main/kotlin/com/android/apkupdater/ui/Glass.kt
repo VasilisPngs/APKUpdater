@@ -34,7 +34,7 @@ private val BlurRadius = 32.dp
 
 internal fun Modifier.captureBackdrop(backdrop: GraphicsLayer, background: Color): Modifier =
     drawWithContent {
-        backdrop.record(this, layoutDirection, size.toIntSize()) {
+        backdrop.record {
             drawRect(background)
             this@drawWithContent.drawContent()
         }
