@@ -5,7 +5,8 @@ plugins {
 
 android {
     namespace = "com.android.apkupdater"
-    compileSdkPreview = "CANARY"
+    compileSdk = 37
+    compileSdkMinor = 2
 
     defaultConfig {
         applicationId = "com.android.apkupdater"
