@@ -123,7 +123,7 @@ class AppUpdateRepository(
         .filter { it.versionCode > installed.versionCode }
         .filter { it.minimumApi <= Build.VERSION.SDK_INT }
         .filter { isStableLink(it.link) }
-        .filter { !it.capabilities.contains(WEAR_STANDALONE) }
+        .filter { apk -> apk.capabilities.none { it in NON_PHONE_CAPABILITIES } }
         .filter { matchesSignature(it, installed) }
         .filter { abiRank(it) != UNSUPPORTED_ABI }
         .minWithOrNull(
@@ -225,7 +225,6 @@ class AppUpdateRepository(
         const val APKMIRROR_URL = "https://www.apkmirror.com"
         const val APKMIRROR_PATH_PREFIX = "/apk/"
         const val NO_DENSITY = "nodpi"
-        const val WEAR_STANDALONE = "wear_standalone"
         val NEWEST_FIRST = compareByDescending<AppUpdateInfo> { it.publishedAt ?: Long.MIN_VALUE }
             .thenBy { it.appName.lowercase(Locale.ROOT) }
         const val UNSUPPORTED_ABI = Int.MAX_VALUE
@@ -236,6 +235,7 @@ class AppUpdateRepository(
             (PackageManager.GET_SIGNING_CERTIFICATES or PackageManager.MATCH_DISABLED_COMPONENTS).toLong()
         )
         val UNIVERSAL_ARCHITECTURES = setOf("universal", "noarch")
+        val NON_PHONE_CAPABILITIES = setOf("wear_standalone", "leanback_standalone")
         val DENSITY_BUCKETS = listOf(
             DisplayMetrics.DENSITY_LOW,
             DisplayMetrics.DENSITY_MEDIUM,
