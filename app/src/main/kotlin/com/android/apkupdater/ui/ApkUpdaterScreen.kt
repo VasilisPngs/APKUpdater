@@ -5,54 +5,58 @@ import android.content.Intent
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.calculateEndPadding
-import androidx.compose.foundation.layout.calculateStartPadding
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.systemBars
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.material3.BottomAppBarDefaults
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Card
-import androidx.compose.material3.CenterAlignedTopAppBar
-import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.ListItem
-import androidx.compose.material3.ListItemDefaults
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.ShortNavigationBar
-import androidx.compose.material3.ShortNavigationBarItem
-import androidx.compose.material3.Snackbar
+import androidx.compose.material3.MenuDefaults
 import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
+import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
@@ -62,16 +66,26 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.dropShadow
+import androidx.compose.ui.draw.innerShadow
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.core.net.toUri
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -80,16 +94,30 @@ import com.android.apkupdater.data.model.AppUpdateInfo
 import com.android.apkupdater.data.model.InstallState
 import com.android.apkupdater.data.model.InstalledApp
 import com.android.apkupdater.data.repository.ScanStatus
+import com.android.apkupdater.ui.theme.CapsuleCorner
+import com.android.apkupdater.ui.theme.CardCorner
+import com.android.apkupdater.ui.theme.Hairline
+import com.android.apkupdater.ui.theme.Ios
+import com.android.apkupdater.ui.theme.IosPalette
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.util.Locale
 
-private val APP_ICON_SIZE = 56.dp
+private val ScreenInset = 20.dp
+private val RowInset = 16.dp
+private val AppIconSize = 56.dp
+private val SeparatorInset = RowInset + AppIconSize + 12.dp
+private val CardRadius = 16.dp
+private val TabBarHeight = 56.dp
+private val ToolbarHeight = 44.dp
 
 private enum class AppTab(val labelRes: Int, val iconRes: Int, val selectedIconRes: Int) {
     Home(R.string.home, R.drawable.ic_home, R.drawable.ic_home_filled),
     Settings(R.string.settings, R.drawable.ic_settings, R.drawable.ic_settings_filled)
 }
+
+private enum class RowPosition { Single, First, Middle, Last }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -97,12 +125,14 @@ fun ApkUpdaterScreen(
     viewModel: ApkUpdaterViewModel,
     modifier: Modifier = Modifier
 ) {
+    val palette = Ios.palette
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     var selectedTab by rememberSaveable { mutableStateOf(AppTab.Home) }
     var menuExpanded by remember { mutableStateOf(false) }
     val homeListState = rememberLazyListState()
     val coroutineScope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
+    val insets = WindowInsets.systemBars.asPaddingValues()
     val bundlePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         uri?.let(viewModel::installBundle)
     }
@@ -138,197 +168,275 @@ fun ApkUpdaterScreen(
         }
     }
 
-    Scaffold(
-        modifier = modifier.fillMaxSize(),
-        topBar = {
-            CenterAlignedTopAppBar(
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = BottomAppBarDefaults.containerColor
-                ),
-                title = { Text(stringResource(R.string.app_name)) },
-                actions = {
-                    IconButton(onClick = { menuExpanded = true }) {
-                        Icon(
-                            painter = painterResource(R.drawable.ic_more_vert),
-                            contentDescription = stringResource(R.string.more_options)
-                        )
-                    }
-                    DropdownMenu(
-                        expanded = menuExpanded,
-                        onDismissRequest = { menuExpanded = false },
-                        shape = MaterialTheme.shapes.extraLarge
-                    ) {
-                        DropdownMenuItem(
-                            text = { Text(stringResource(R.string.install_bundle)) },
-                            onClick = {
-                                menuExpanded = false
-                                bundlePicker.launch(arrayOf("*/*"))
-                            }
-                        )
-                    }
-                }
-            )
-        },
-        bottomBar = {
-            ShortNavigationBar {
-                AppTab.entries.forEach { tab ->
-                    val selected = selectedTab == tab
-                    ShortNavigationBarItem(
-                        selected = selected,
-                        onClick = {
-                            when {
-                                !selected -> selectedTab = tab
-                                tab == AppTab.Home && homeListState.canScrollBackward ->
-                                    coroutineScope.launch { homeListState.animateScrollToItem(0) }
-                                else -> Unit
-                            }
-                        },
-                        icon = {
-                            Icon(
-                                painter = painterResource(
-                                    if (selected) tab.selectedIconRes else tab.iconRes
-                                ),
-                                contentDescription = stringResource(tab.labelRes)
-                            )
-                        },
-                        label = { Text(stringResource(tab.labelRes)) }
-                    )
+    val scrolled by remember { derivedStateOf { homeListState.firstVisibleItemIndex > 0 } }
+    val collapsed = selectedTab != AppTab.Home || scrolled
+
+    Box(modifier = modifier.fillMaxSize().background(palette.groupedBackground)) {
+        val pullState = rememberPullToRefreshState()
+        PullToRefreshBox(
+            isRefreshing = false,
+            onRefresh = viewModel::scanForUpdates,
+            state = pullState,
+            indicator = {
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.TopCenter)
+                        .padding(top = insets.calculateTopPadding() + ToolbarHeight + 8.dp)
+                        .alpha(pullState.distanceFraction.coerceIn(0f, 1f))
+                ) {
+                    ActivityIndicator(size = 22.dp, color = palette.tertiaryLabel)
                 }
             }
-        },
-        snackbarHost = {
-            SnackbarHost(snackbarHostState) { data ->
-                Snackbar(snackbarData = data, shape = MaterialTheme.shapes.extraLarge)
-            }
-        }
-    ) { innerPadding ->
-        AnimatedContent(targetState = selectedTab) { tab ->
-            when (tab) {
-                AppTab.Home -> HomeContent(
-                    modifier = Modifier.fillMaxSize(),
-                    contentPadding = innerPadding,
+        ) {
+            when (selectedTab) {
+                AppTab.Home -> HomeList(
+                    listState = homeListState,
+                    insets = insets,
                     isScanning = uiState.scanStatus == ScanStatus.Scanning,
                     updates = updates,
-                    listState = homeListState,
-                    installs = uiState.installs,
-                    onScan = viewModel::scanForUpdates
+                    installs = uiState.installs
                 )
-                AppTab.Settings -> SettingsContent(
-                    modifier = Modifier.fillMaxSize().padding(innerPadding),
+                AppTab.Settings -> SettingsList(
+                    insets = insets,
                     includeDisabledApps = uiState.includeDisabledApps,
                     onIncludeDisabledAppsChange = viewModel::setIncludeDisabledApps
                 )
             }
         }
-    }
-}
 
-@Composable
-private fun ScanStatusLine(isScanning: Boolean, found: Int) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(BottomAppBarDefaults.containerColor)
-            .padding(horizontal = 16.dp, vertical = 12.dp),
-        horizontalArrangement = Arrangement.spacedBy(ButtonDefaults.IconSpacing),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Text(
-            text = when {
-                isScanning -> stringResource(R.string.checking_for_updates)
-                found == 0 -> stringResource(R.string.all_up_to_date)
-                else -> pluralStringResource(R.plurals.updates_found, found, found)
-            },
-            style = MaterialTheme.typography.bodyLarge,
-            color = MaterialTheme.colorScheme.onSurface
+        Toolbar(
+            title = stringResource(
+                if (selectedTab == AppTab.Home) R.string.app_name else R.string.settings
+            ),
+            collapsed = collapsed,
+            topInset = insets.calculateTopPadding(),
+            menuExpanded = menuExpanded,
+            onMenuExpandedChange = { menuExpanded = it },
+            onPickBundle = { bundlePicker.launch(arrayOf("*/*")) }
         )
-        if (isScanning) {
-            CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+
+        SnackbarHost(
+            hostState = snackbarHostState,
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .padding(bottom = insets.calculateBottomPadding() + TabBarHeight + 24.dp)
+        ) { data ->
+            Text(
+                text = data.visuals.message,
+                style = Ios.text.subheadline,
+                color = Color.White,
+                textAlign = TextAlign.Center,
+                modifier = Modifier
+                    .padding(horizontal = ScreenInset)
+                    .clip(CapsuleCorner)
+                    .background(Color(0xE61C1C1E))
+                    .padding(horizontal = 20.dp, vertical = 12.dp)
+            )
         }
+
+        TabBar(
+            selectedTab = selectedTab,
+            bottomInset = insets.calculateBottomPadding(),
+            modifier = Modifier.align(Alignment.BottomCenter),
+            onSelect = { tab ->
+                when {
+                    tab != selectedTab -> selectedTab = tab
+                    tab == AppTab.Home && homeListState.canScrollBackward ->
+                        coroutineScope.launch { homeListState.animateScrollToItem(0) }
+                    else -> Unit
+                }
+            }
+        )
     }
 }
 
 @Composable
-private fun HomeContent(
-    modifier: Modifier,
-    contentPadding: PaddingValues,
+private fun HomeList(
+    listState: LazyListState,
+    insets: PaddingValues,
     isScanning: Boolean,
     updates: List<Pair<InstalledApp, AppUpdateInfo>>,
-    listState: LazyListState,
-    installs: Map<String, InstallState>,
-    onScan: () -> Unit
+    installs: Map<String, InstallState>
 ) {
-    val layoutDirection = LocalLayoutDirection.current
+    val running = installs.values.toList()
 
-    PullToRefreshBox(
-        isRefreshing = false,
-        onRefresh = onScan,
-        modifier = modifier.padding(
-            start = contentPadding.calculateStartPadding(layoutDirection),
-            top = contentPadding.calculateTopPadding(),
-            end = contentPadding.calculateEndPadding(layoutDirection)
+    LazyColumn(
+        state = listState,
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(
+            top = insets.calculateTopPadding() + ToolbarHeight,
+            bottom = insets.calculateBottomPadding() + TabBarHeight + 32.dp
         )
     ) {
-        Column(modifier = Modifier.fillMaxSize()) {
-            ScanStatusLine(isScanning = isScanning, found = updates.size)
+        item(key = "title") { LargeTitle(stringResource(R.string.app_name)) }
 
-            installs.values.forEach { state ->
-                RoundedSection {
-                    ListItem(
-                        colors = ListItemDefaults.colors(containerColor = Color.Transparent),
-                        headlineContent = {
-                            Text(state.appName, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                        },
-                        trailingContent = {
-                            Box(modifier = Modifier.size(48.dp), contentAlignment = Alignment.Center) {
-                                CircularProgressIndicator(modifier = Modifier.size(24.dp))
-                            }
-                        }
-                    )
+        if (running.isNotEmpty()) {
+            itemsIndexed(running, key = { _, state -> state.appName }) { index, state ->
+                GroupedRow(position = positionOf(index, running.size)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(RowInset),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = state.appName,
+                            style = Ios.text.body,
+                            color = Ios.palette.label,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f)
+                        )
+                        ActivityIndicator(size = 20.dp, color = Ios.palette.tertiaryLabel)
+                    }
                 }
             }
+            item(key = "installs-gap") { Spacer(Modifier.height(24.dp)) }
+        }
 
-            LazyColumn(
-                state = listState,
-                modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(
-                    start = 16.dp,
-                    top = 16.dp,
-                    end = 16.dp,
-                    bottom = contentPadding.calculateBottomPadding() + 16.dp
-                ),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
+        item(key = "status") {
+            SectionHeader(
+                text = when {
+                    isScanning -> stringResource(R.string.checking_for_updates)
+                    updates.isEmpty() -> stringResource(R.string.all_up_to_date)
+                    else -> pluralStringResource(R.plurals.updates_found, updates.size, updates.size)
+                },
+                busy = isScanning
+            )
+        }
+
+        itemsIndexed(
+            items = updates,
+            key = { _, pair -> pair.first.packageName }
+        ) { index, pair ->
+            GroupedRow(
+                position = positionOf(index, updates.size),
+                modifier = Modifier.animateItem()
             ) {
-                items(updates, key = { (app, _) -> app.packageName }) { (app, update) ->
-                    AppListItem(
-                        modifier = Modifier.animateItem(),
-                        app = app,
-                        update = update
-                    )
-                }
+                UpdateRow(app = pair.first, update = pair.second)
             }
         }
     }
 }
 
 @Composable
-private fun RoundedSection(content: @Composable () -> Unit) {
-    Card(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
-        shape = MaterialTheme.shapes.extraLarge
+private fun SettingsList(
+    insets: PaddingValues,
+    includeDisabledApps: Boolean,
+    onIncludeDisabledAppsChange: (Boolean) -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(top = insets.calculateTopPadding() + ToolbarHeight)
     ) {
-        content()
+        LargeTitle(stringResource(R.string.settings))
+        Spacer(Modifier.height(16.dp))
+        GroupedRow(position = RowPosition.Single) {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = RowInset, vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = stringResource(R.string.disabled_apps),
+                    style = Ios.text.body,
+                    color = Ios.palette.label,
+                    modifier = Modifier.weight(1f)
+                )
+                IosSwitch(
+                    checked = includeDisabledApps,
+                    onCheckedChange = onIncludeDisabledAppsChange
+                )
+            }
+        }
+        Text(
+            text = stringResource(R.string.disabled_apps_description),
+            style = Ios.text.footnote,
+            color = Ios.palette.secondaryLabel,
+            modifier = Modifier.padding(
+                start = ScreenInset + RowInset,
+                end = ScreenInset,
+                top = 8.dp
+            )
+        )
     }
 }
 
 @Composable
-private fun AppListItem(
-    modifier: Modifier,
-    app: InstalledApp,
-    update: AppUpdateInfo
+private fun LargeTitle(text: String) {
+    Text(
+        text = text,
+        style = Ios.text.largeTitle,
+        color = Ios.palette.label,
+        modifier = Modifier.padding(horizontal = ScreenInset, vertical = 8.dp)
+    )
+}
+
+@Composable
+private fun SectionHeader(text: String, busy: Boolean) {
+    Row(
+        modifier = Modifier.padding(
+            start = ScreenInset + RowInset,
+            end = ScreenInset,
+            top = 16.dp,
+            bottom = 7.dp
+        ),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Text(
+            text = text.uppercase(Locale.ROOT),
+            style = Ios.text.footnote,
+            color = Ios.palette.secondaryLabel
+        )
+        if (busy) ActivityIndicator(size = 14.dp, color = Ios.palette.tertiaryLabel)
+    }
+}
+
+private fun positionOf(index: Int, count: Int): RowPosition = when {
+    count == 1 -> RowPosition.Single
+    index == 0 -> RowPosition.First
+    index == count - 1 -> RowPosition.Last
+    else -> RowPosition.Middle
+}
+
+@Composable
+private fun GroupedRow(
+    position: RowPosition,
+    modifier: Modifier = Modifier,
+    content: @Composable () -> Unit
 ) {
+    val palette = Ios.palette
+    val shape = when (position) {
+        RowPosition.Single -> CardCorner
+        RowPosition.First -> RoundedCornerShape(topStart = CardRadius, topEnd = CardRadius)
+        RowPosition.Middle -> RoundedCornerShape(0.dp)
+        RowPosition.Last -> RoundedCornerShape(bottomStart = CardRadius, bottomEnd = CardRadius)
+    }
+
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = ScreenInset)
+            .clip(shape)
+            .background(palette.cardFill)
+    ) {
+        content()
+        if (position == RowPosition.First || position == RowPosition.Middle) {
+            Box(
+                modifier = Modifier
+                    .padding(start = SeparatorInset)
+                    .fillMaxWidth()
+                    .height(Hairline)
+                    .background(palette.separator)
+            )
+        }
+    }
+}
+
+@Composable
+private fun UpdateRow(app: InstalledApp, update: AppUpdateInfo) {
+    val palette = Ios.palette
     val context = LocalContext.current
-    val iconSizePx = with(LocalDensity.current) { APP_ICON_SIZE.roundToPx() }
+    val iconSizePx = with(LocalDensity.current) { AppIconSize.roundToPx() }
     val iconBitmap by produceState(AppIconCache.peek(app.packageName), app.packageName) {
         if (value == null) {
             value = withContext(Dispatchers.IO) {
@@ -337,79 +445,271 @@ private fun AppListItem(
         }
     }
 
-    Card(modifier = modifier.fillMaxWidth(), shape = MaterialTheme.shapes.extraLarge) {
-        Column(modifier = Modifier.fillMaxWidth().padding(20.dp)) {
-            Row(verticalAlignment = Alignment.Top) {
-                if (iconBitmap != null) {
-                    Image(
-                        bitmap = iconBitmap!!.asImageBitmap(),
-                        contentDescription = null,
-                        modifier = Modifier.size(APP_ICON_SIZE),
-                        contentScale = ContentScale.Fit
-                    )
-                } else {
-                    Box(Modifier.size(APP_ICON_SIZE))
-                }
-                Spacer(Modifier.width(16.dp))
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = update.appName,
-                        maxLines = 3,
-                        overflow = TextOverflow.Ellipsis,
-                        style = MaterialTheme.typography.titleMedium
-                    )
-                    Spacer(Modifier.height(4.dp))
-                    Text(
-                        text = stringResource(
-                            R.string.version_current,
-                            app.versionName,
-                            app.versionCode
-                        ),
-                        style = MaterialTheme.typography.bodyLarge
-                    )
-                    Spacer(Modifier.height(4.dp))
-                    Text(
-                        text = stringResource(
-                            R.string.version_latest,
-                            update.newVersionName,
-                            update.newVersionCode
-                        ),
-                        style = MaterialTheme.typography.bodyLarge
-                    )
-                }
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(RowInset),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(modifier = Modifier.size(AppIconSize).clip(RoundedCornerShape(12.dp))) {
+            iconBitmap?.let { bitmap ->
+                Image(
+                    bitmap = bitmap.asImageBitmap(),
+                    contentDescription = null,
+                    modifier = Modifier.fillMaxSize(),
+                    contentScale = ContentScale.Fit
+                )
             }
-            Spacer(Modifier.height(16.dp))
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.End
+        }
+        Spacer(Modifier.width(12.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = update.appName,
+                style = Ios.text.headline,
+                color = palette.label,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
+            )
+            Spacer(Modifier.height(2.dp))
+            Text(
+                text = stringResource(R.string.version_current, app.versionName, app.versionCode),
+                style = Ios.text.footnote,
+                color = palette.secondaryLabel
+            )
+            Text(
+                text = stringResource(
+                    R.string.version_latest,
+                    update.newVersionName,
+                    update.newVersionCode
+                ),
+                style = Ios.text.footnote,
+                color = palette.secondaryLabel
+            )
+        }
+        Spacer(Modifier.width(12.dp))
+        CapsuleButton(
+            text = stringResource(R.string.update),
+            onClick = { openUrlInBrowser(context, update.apkMirrorUrl) }
+        )
+    }
+}
+
+@Composable
+private fun CapsuleButton(text: String, onClick: () -> Unit) {
+    val palette = Ios.palette
+    Text(
+        text = text,
+        style = Ios.text.headline,
+        color = palette.accent,
+        maxLines = 1,
+        modifier = Modifier
+            .clip(CapsuleCorner)
+            .background(palette.controlFill)
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                onClick = onClick
+            )
+            .padding(horizontal = 16.dp, vertical = 6.dp)
+    )
+}
+
+@Composable
+private fun Toolbar(
+    title: String,
+    collapsed: Boolean,
+    topInset: Dp,
+    menuExpanded: Boolean,
+    onMenuExpandedChange: (Boolean) -> Unit,
+    onPickBundle: () -> Unit
+) {
+    val palette = Ios.palette
+    val titleAlpha by animateFloatAsState(if (collapsed) 1f else 0f, tween(200), label = "title")
+
+    Box(modifier = Modifier.fillMaxWidth().padding(top = topInset).height(ToolbarHeight)) {
+        Text(
+            text = title,
+            style = Ios.text.headline,
+            color = palette.label,
+            modifier = Modifier.align(Alignment.Center).alpha(titleAlpha)
+        )
+        Box(modifier = Modifier.align(Alignment.CenterEnd).padding(end = ScreenInset)) {
+            Box(
+                modifier = Modifier
+                    .size(36.dp)
+                    .glass(CircleShape, palette)
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null
+                    ) { onMenuExpandedChange(true) },
+                contentAlignment = Alignment.Center
             ) {
-                FilledTonalButton(onClick = { openUrlInBrowser(context, update.apkMirrorUrl) }) {
-                    Text(stringResource(R.string.update))
-                }
+                Icon(
+                    painter = painterResource(R.drawable.ic_ellipsis),
+                    contentDescription = stringResource(R.string.more_options),
+                    tint = palette.label,
+                    modifier = Modifier.size(18.dp)
+                )
+            }
+            DropdownMenu(
+                expanded = menuExpanded,
+                onDismissRequest = { onMenuExpandedChange(false) },
+                shape = RoundedCornerShape(14.dp),
+                containerColor = palette.material,
+                shadowElevation = 12.dp
+            ) {
+                DropdownMenuItem(
+                    text = {
+                        Text(
+                            text = stringResource(R.string.install_bundle),
+                            style = Ios.text.body,
+                            color = palette.label
+                        )
+                    },
+                    colors = MenuDefaults.itemColors(textColor = palette.label),
+                    onClick = {
+                        onMenuExpandedChange(false)
+                        onPickBundle()
+                    }
+                )
             }
         }
     }
 }
 
 @Composable
-private fun SettingsContent(
+private fun TabBar(
+    selectedTab: AppTab,
+    bottomInset: Dp,
     modifier: Modifier,
-    includeDisabledApps: Boolean,
-    onIncludeDisabledAppsChange: (Boolean) -> Unit
+    onSelect: (AppTab) -> Unit
 ) {
-    Column(modifier) {
-        RoundedSection {
-            ListItem(
-                colors = ListItemDefaults.colors(containerColor = Color.Transparent),
-                headlineContent = { Text(stringResource(R.string.disabled_apps)) },
-                supportingContent = { Text(stringResource(R.string.disabled_apps_description)) },
-                trailingContent = {
-                    Switch(checked = includeDisabledApps, onCheckedChange = onIncludeDisabledAppsChange)
-                }
-            )
+    val palette = Ios.palette
+    Row(
+        modifier = modifier
+            .padding(bottom = bottomInset + 8.dp)
+            .glass(CapsuleCorner, palette)
+            .height(TabBarHeight),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        AppTab.entries.forEach { tab ->
+            val selected = selectedTab == tab
+            val tint = if (selected) palette.accent else palette.secondaryLabel
+            Column(
+                modifier = Modifier
+                    .widthIn(min = 88.dp)
+                    .fillMaxHeight()
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null
+                    ) { onSelect(tab) },
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center
+            ) {
+                Icon(
+                    painter = painterResource(if (selected) tab.selectedIconRes else tab.iconRes),
+                    contentDescription = stringResource(tab.labelRes),
+                    tint = tint,
+                    modifier = Modifier.size(25.dp)
+                )
+                Spacer(Modifier.height(3.dp))
+                Text(text = stringResource(tab.labelRes), style = Ios.text.caption2, color = tint)
+            }
         }
     }
 }
+
+@Composable
+private fun IosSwitch(checked: Boolean, onCheckedChange: (Boolean) -> Unit) {
+    val palette = Ios.palette
+    val track by animateColorAsState(
+        targetValue = if (checked) palette.positive else palette.controlFill,
+        animationSpec = tween(180),
+        label = "track"
+    )
+    val thumbOffset by animateDpAsState(
+        targetValue = if (checked) 20.dp else 0.dp,
+        animationSpec = tween(180),
+        label = "thumb"
+    )
+
+    Box(
+        modifier = Modifier
+            .size(width = 51.dp, height = 31.dp)
+            .clip(CapsuleCorner)
+            .background(track)
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null
+            ) { onCheckedChange(!checked) }
+            .padding(2.dp),
+        contentAlignment = Alignment.CenterStart
+    ) {
+        Box(
+            modifier = Modifier
+                .offset { IntOffset(thumbOffset.roundToPx(), 0) }
+                .size(27.dp)
+                .dropShadow(CircleShape) {
+                    radius = 3.dp.toPx()
+                    color = Color.Black
+                    alpha = 0.22f
+                    offset = Offset(0f, 1.dp.toPx())
+                }
+                .clip(CircleShape)
+                .background(Color.White)
+        )
+    }
+}
+
+@Composable
+private fun ActivityIndicator(size: Dp, color: Color) {
+    val spokes = 12
+    val transition = rememberInfiniteTransition(label = "activity")
+    val progress by transition.animateFloat(
+        initialValue = 0f,
+        targetValue = spokes.toFloat(),
+        animationSpec = infiniteRepeatable(tween(900, easing = LinearEasing)),
+        label = "spoke"
+    )
+
+    Canvas(modifier = Modifier.size(size)) {
+        val outer = this.size.minDimension / 2f
+        val inner = outer * 0.46f
+        val stroke = outer * 0.22f
+        repeat(spokes) { index ->
+            val position = (index + progress.toInt()) % spokes
+            rotate(degrees = index * 360f / spokes) {
+                drawLine(
+                    color = color.copy(alpha = 0.15f + 0.85f * position / (spokes - 1f)),
+                    start = Offset(center.x, center.y - inner),
+                    end = Offset(center.x, center.y - outer),
+                    strokeWidth = stroke,
+                    cap = StrokeCap.Round
+                )
+            }
+        }
+    }
+}
+
+private fun Modifier.glass(shape: Shape, palette: IosPalette): Modifier = this
+    .dropShadow(shape) {
+        radius = 18.dp.toPx()
+        color = palette.shadow
+        alpha = 0.16f
+        offset = Offset(0f, 6.dp.toPx())
+    }
+    .clip(shape)
+    .background(palette.material)
+    .innerShadow(shape) {
+        radius = 2.dp.toPx()
+        color = palette.materialSheen
+        offset = Offset(0f, 1.dp.toPx())
+    }
+    .innerShadow(shape) {
+        radius = 4.dp.toPx()
+        color = palette.materialRim
+        alpha = 0.5f
+        offset = Offset(0f, (-2).dp.toPx())
+    }
+    .border(Hairline, palette.materialRim, shape)
 
 private fun openUrlInBrowser(context: Context, url: String) {
     runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, url.toUri())) }
