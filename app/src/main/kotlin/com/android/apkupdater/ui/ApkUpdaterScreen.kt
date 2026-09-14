@@ -16,7 +16,6 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
@@ -39,7 +38,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
-import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -69,13 +68,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.dropShadow
-import androidx.compose.ui.draw.innerShadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.drawscope.rotate
+import androidx.compose.ui.graphics.layer.GraphicsLayer
+import androidx.compose.ui.graphics.rememberGraphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
@@ -98,7 +98,6 @@ import com.android.apkupdater.ui.theme.CapsuleCorner
 import com.android.apkupdater.ui.theme.CardCorner
 import com.android.apkupdater.ui.theme.Hairline
 import com.android.apkupdater.ui.theme.Ios
-import com.android.apkupdater.ui.theme.IosPalette
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -106,18 +105,16 @@ import java.util.Locale
 
 private val ScreenInset = 20.dp
 private val RowInset = 16.dp
+private val CardGap = 12.dp
 private val AppIconSize = 56.dp
-private val SeparatorInset = RowInset + AppIconSize + 12.dp
-private val CardRadius = 16.dp
 private val TabBarHeight = 56.dp
 private val ToolbarHeight = 44.dp
+private val CollapseThreshold = 28.dp
 
 private enum class AppTab(val labelRes: Int, val iconRes: Int, val selectedIconRes: Int) {
     Home(R.string.home, R.drawable.ic_home, R.drawable.ic_home_filled),
     Settings(R.string.settings, R.drawable.ic_settings, R.drawable.ic_settings_filled)
 }
-
-private enum class RowPosition { Single, First, Middle, Last }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -130,9 +127,11 @@ fun ApkUpdaterScreen(
     var selectedTab by rememberSaveable { mutableStateOf(AppTab.Home) }
     var menuExpanded by remember { mutableStateOf(false) }
     val homeListState = rememberLazyListState()
+    val settingsListState = rememberLazyListState()
     val coroutineScope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
     val insets = WindowInsets.systemBars.asPaddingValues()
+    val backdrop = rememberGraphicsLayer()
     val bundlePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         uri?.let(viewModel::installBundle)
     }
@@ -168,43 +167,51 @@ fun ApkUpdaterScreen(
         }
     }
 
-    val scrolled by remember { derivedStateOf { homeListState.firstVisibleItemIndex > 0 } }
-    val collapsed = selectedTab != AppTab.Home || scrolled
+    val threshold = with(LocalDensity.current) { CollapseThreshold.roundToPx() }
+    val homeCollapsed by remember(threshold) { derivedStateOf { homeListState.isCollapsed(threshold) } }
+    val settingsCollapsed by remember(threshold) {
+        derivedStateOf { settingsListState.isCollapsed(threshold) }
+    }
+    val collapsed = if (selectedTab == AppTab.Home) homeCollapsed else settingsCollapsed
 
-    Box(modifier = modifier.fillMaxSize().background(palette.groupedBackground)) {
-        val pullState = rememberPullToRefreshState()
-        PullToRefreshBox(
-            isRefreshing = false,
-            onRefresh = viewModel::scanForUpdates,
-            state = pullState,
-            indicator = {
-                Box(
-                    modifier = Modifier
-                        .align(Alignment.TopCenter)
-                        .padding(top = insets.calculateTopPadding() + ToolbarHeight + 8.dp)
-                        .alpha(pullState.distanceFraction.coerceIn(0f, 1f))
-                ) {
-                    ActivityIndicator(size = 22.dp, color = palette.tertiaryLabel)
+    Box(modifier = modifier.fillMaxSize()) {
+        Box(modifier = Modifier.fillMaxSize().captureBackdrop(backdrop, palette.groupedBackground)) {
+            val pullState = rememberPullToRefreshState()
+            PullToRefreshBox(
+                isRefreshing = false,
+                onRefresh = viewModel::scanForUpdates,
+                state = pullState,
+                indicator = {
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.TopCenter)
+                            .padding(top = insets.calculateTopPadding() + ToolbarHeight + 8.dp)
+                            .alpha(pullState.distanceFraction.coerceIn(0f, 1f))
+                    ) {
+                        ActivityIndicator(size = 22.dp, color = palette.tertiaryLabel)
+                    }
                 }
-            }
-        ) {
-            when (selectedTab) {
-                AppTab.Home -> HomeList(
-                    listState = homeListState,
-                    insets = insets,
-                    isScanning = uiState.scanStatus == ScanStatus.Scanning,
-                    updates = updates,
-                    installs = uiState.installs
-                )
-                AppTab.Settings -> SettingsList(
-                    insets = insets,
-                    includeDisabledApps = uiState.includeDisabledApps,
-                    onIncludeDisabledAppsChange = viewModel::setIncludeDisabledApps
-                )
+            ) {
+                when (selectedTab) {
+                    AppTab.Home -> HomeList(
+                        listState = homeListState,
+                        insets = insets,
+                        isScanning = uiState.scanStatus == ScanStatus.Scanning,
+                        updates = updates,
+                        installs = uiState.installs
+                    )
+                    AppTab.Settings -> SettingsList(
+                        listState = settingsListState,
+                        insets = insets,
+                        includeDisabledApps = uiState.includeDisabledApps,
+                        onIncludeDisabledAppsChange = viewModel::setIncludeDisabledApps
+                    )
+                }
             }
         }
 
         Toolbar(
+            backdrop = backdrop,
             title = stringResource(
                 if (selectedTab == AppTab.Home) R.string.app_name else R.string.settings
             ),
@@ -235,6 +242,7 @@ fun ApkUpdaterScreen(
         }
 
         TabBar(
+            backdrop = backdrop,
             selectedTab = selectedTab,
             bottomInset = insets.calculateBottomPadding(),
             modifier = Modifier.align(Alignment.BottomCenter),
@@ -250,6 +258,9 @@ fun ApkUpdaterScreen(
     }
 }
 
+private fun LazyListState.isCollapsed(threshold: Int): Boolean =
+    firstVisibleItemIndex > 0 || firstVisibleItemScrollOffset > threshold
+
 @Composable
 private fun HomeList(
     listState: LazyListState,
@@ -258,8 +269,6 @@ private fun HomeList(
     updates: List<Pair<InstalledApp, AppUpdateInfo>>,
     installs: Map<String, InstallState>
 ) {
-    val running = installs.values.toList()
-
     LazyColumn(
         state = listState,
         modifier = Modifier.fillMaxSize(),
@@ -270,26 +279,23 @@ private fun HomeList(
     ) {
         item(key = "title") { LargeTitle(stringResource(R.string.app_name)) }
 
-        if (running.isNotEmpty()) {
-            itemsIndexed(running, key = { _, state -> state.appName }) { index, state ->
-                GroupedRow(position = positionOf(index, running.size)) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth().padding(RowInset),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = state.appName,
-                            style = Ios.text.body,
-                            color = Ios.palette.label,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.weight(1f)
-                        )
-                        ActivityIndicator(size = 20.dp, color = Ios.palette.tertiaryLabel)
-                    }
+        items(installs.values.toList(), key = InstallState::appName) { state ->
+            IosCard {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(RowInset),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = state.appName,
+                        style = Ios.text.body,
+                        color = Ios.palette.label,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f)
+                    )
+                    ActivityIndicator(size = 20.dp, color = Ios.palette.tertiaryLabel)
                 }
             }
-            item(key = "installs-gap") { Spacer(Modifier.height(24.dp)) }
         }
 
         item(key = "status") {
@@ -303,14 +309,8 @@ private fun HomeList(
             )
         }
 
-        itemsIndexed(
-            items = updates,
-            key = { _, pair -> pair.first.packageName }
-        ) { index, pair ->
-            GroupedRow(
-                position = positionOf(index, updates.size),
-                modifier = Modifier.animateItem()
-            ) {
+        items(items = updates, key = { it.first.packageName }) { pair ->
+            IosCard(modifier = Modifier.animateItem()) {
                 UpdateRow(app = pair.first, update = pair.second)
             }
         }
@@ -319,44 +319,67 @@ private fun HomeList(
 
 @Composable
 private fun SettingsList(
+    listState: LazyListState,
     insets: PaddingValues,
     includeDisabledApps: Boolean,
     onIncludeDisabledAppsChange: (Boolean) -> Unit
 ) {
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(top = insets.calculateTopPadding() + ToolbarHeight)
+    LazyColumn(
+        state = listState,
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(
+            top = insets.calculateTopPadding() + ToolbarHeight,
+            bottom = insets.calculateBottomPadding() + TabBarHeight + 32.dp
+        )
     ) {
-        LargeTitle(stringResource(R.string.settings))
-        Spacer(Modifier.height(16.dp))
-        GroupedRow(position = RowPosition.Single) {
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = RowInset, vertical = 12.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = stringResource(R.string.disabled_apps),
-                    style = Ios.text.body,
-                    color = Ios.palette.label,
-                    modifier = Modifier.weight(1f)
-                )
-                IosSwitch(
-                    checked = includeDisabledApps,
-                    onCheckedChange = onIncludeDisabledAppsChange
-                )
+        item(key = "title") { LargeTitle(stringResource(R.string.settings)) }
+        item(key = "spacer") { Spacer(Modifier.height(8.dp)) }
+        item(key = "disabled-apps") {
+            IosCard {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = RowInset, vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = stringResource(R.string.disabled_apps),
+                        style = Ios.text.body,
+                        color = Ios.palette.label,
+                        modifier = Modifier.weight(1f)
+                    )
+                    IosSwitch(
+                        checked = includeDisabledApps,
+                        onCheckedChange = onIncludeDisabledAppsChange
+                    )
+                }
             }
         }
-        Text(
-            text = stringResource(R.string.disabled_apps_description),
-            style = Ios.text.footnote,
-            color = Ios.palette.secondaryLabel,
-            modifier = Modifier.padding(
-                start = ScreenInset + RowInset,
-                end = ScreenInset,
-                top = 8.dp
+        item(key = "disabled-apps-footer") {
+            Text(
+                text = stringResource(R.string.disabled_apps_description),
+                style = Ios.text.footnote,
+                color = Ios.palette.secondaryLabel,
+                modifier = Modifier.padding(
+                    start = ScreenInset + RowInset,
+                    end = ScreenInset
+                )
             )
-        )
+        }
+    }
+}
+
+@Composable
+private fun IosCard(modifier: Modifier = Modifier, content: @Composable () -> Unit) {
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = ScreenInset)
+            .padding(bottom = CardGap)
+            .clip(CardCorner)
+            .background(Ios.palette.cardFill)
+    ) {
+        content()
     }
 }
 
@@ -376,7 +399,7 @@ private fun SectionHeader(text: String, busy: Boolean) {
         modifier = Modifier.padding(
             start = ScreenInset + RowInset,
             end = ScreenInset,
-            top = 16.dp,
+            top = 12.dp,
             bottom = 7.dp
         ),
         verticalAlignment = Alignment.CenterVertically,
@@ -388,47 +411,6 @@ private fun SectionHeader(text: String, busy: Boolean) {
             color = Ios.palette.secondaryLabel
         )
         if (busy) ActivityIndicator(size = 14.dp, color = Ios.palette.tertiaryLabel)
-    }
-}
-
-private fun positionOf(index: Int, count: Int): RowPosition = when {
-    count == 1 -> RowPosition.Single
-    index == 0 -> RowPosition.First
-    index == count - 1 -> RowPosition.Last
-    else -> RowPosition.Middle
-}
-
-@Composable
-private fun GroupedRow(
-    position: RowPosition,
-    modifier: Modifier = Modifier,
-    content: @Composable () -> Unit
-) {
-    val palette = Ios.palette
-    val shape = when (position) {
-        RowPosition.Single -> CardCorner
-        RowPosition.First -> RoundedCornerShape(topStart = CardRadius, topEnd = CardRadius)
-        RowPosition.Middle -> RoundedCornerShape(0.dp)
-        RowPosition.Last -> RoundedCornerShape(bottomStart = CardRadius, bottomEnd = CardRadius)
-    }
-
-    Column(
-        modifier = modifier
-            .fillMaxWidth()
-            .padding(horizontal = ScreenInset)
-            .clip(shape)
-            .background(palette.cardFill)
-    ) {
-        content()
-        if (position == RowPosition.First || position == RowPosition.Middle) {
-            Box(
-                modifier = Modifier
-                    .padding(start = SeparatorInset)
-                    .fillMaxWidth()
-                    .height(Hairline)
-                    .background(palette.separator)
-            )
-        }
     }
 }
 
@@ -514,6 +496,7 @@ private fun CapsuleButton(text: String, onClick: () -> Unit) {
 
 @Composable
 private fun Toolbar(
+    backdrop: GraphicsLayer,
     title: String,
     collapsed: Boolean,
     topInset: Dp,
@@ -522,54 +505,74 @@ private fun Toolbar(
     onPickBundle: () -> Unit
 ) {
     val palette = Ios.palette
-    val titleAlpha by animateFloatAsState(if (collapsed) 1f else 0f, tween(200), label = "title")
+    val barAlpha by animateFloatAsState(if (collapsed) 1f else 0f, tween(220), label = "bar")
 
-    Box(modifier = Modifier.fillMaxWidth().padding(top = topInset).height(ToolbarHeight)) {
-        Text(
-            text = title,
-            style = Ios.text.headline,
-            color = palette.label,
-            modifier = Modifier.align(Alignment.Center).alpha(titleAlpha)
-        )
-        Box(modifier = Modifier.align(Alignment.CenterEnd).padding(end = ScreenInset)) {
+    Box(modifier = Modifier.fillMaxWidth().height(topInset + ToolbarHeight)) {
+        if (barAlpha > 0f) {
+            GlassSurface(
+                backdrop = backdrop,
+                shape = RectangleShape,
+                palette = palette,
+                modifier = Modifier.fillMaxSize().alpha(barAlpha)
+            )
             Box(
                 modifier = Modifier
-                    .size(36.dp)
-                    .glass(CircleShape, palette)
-                    .clickable(
-                        interactionSource = remember { MutableInteractionSource() },
-                        indication = null
-                    ) { onMenuExpandedChange(true) },
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    painter = painterResource(R.drawable.ic_ellipsis),
-                    contentDescription = stringResource(R.string.more_options),
-                    tint = palette.label,
-                    modifier = Modifier.size(18.dp)
-                )
-            }
-            DropdownMenu(
-                expanded = menuExpanded,
-                onDismissRequest = { onMenuExpandedChange(false) },
-                shape = RoundedCornerShape(14.dp),
-                containerColor = palette.material,
-                shadowElevation = 12.dp
-            ) {
-                DropdownMenuItem(
-                    text = {
-                        Text(
-                            text = stringResource(R.string.install_bundle),
-                            style = Ios.text.body,
-                            color = palette.label
-                        )
-                    },
-                    colors = MenuDefaults.itemColors(textColor = palette.label),
-                    onClick = {
-                        onMenuExpandedChange(false)
-                        onPickBundle()
-                    }
-                )
+                    .align(Alignment.BottomCenter)
+                    .fillMaxWidth()
+                    .height(Hairline)
+                    .alpha(barAlpha)
+                    .background(palette.separator)
+            )
+        }
+
+        Box(modifier = Modifier.fillMaxWidth().padding(top = topInset).height(ToolbarHeight)) {
+            Text(
+                text = title,
+                style = Ios.text.headline,
+                color = palette.label,
+                modifier = Modifier.align(Alignment.Center).alpha(barAlpha)
+            )
+            Box(modifier = Modifier.align(Alignment.CenterEnd).padding(end = ScreenInset)) {
+                GlassSurface(
+                    backdrop = backdrop,
+                    shape = CircleShape,
+                    palette = palette,
+                    modifier = Modifier
+                        .size(36.dp)
+                        .clickable(
+                            interactionSource = remember { MutableInteractionSource() },
+                            indication = null
+                        ) { onMenuExpandedChange(true) }
+                ) {
+                    Icon(
+                        painter = painterResource(R.drawable.ic_ellipsis),
+                        contentDescription = stringResource(R.string.more_options),
+                        tint = palette.label,
+                        modifier = Modifier.align(Alignment.Center).size(18.dp)
+                    )
+                }
+                DropdownMenu(
+                    expanded = menuExpanded,
+                    onDismissRequest = { onMenuExpandedChange(false) },
+                    shape = RoundedCornerShape(14.dp),
+                    containerColor = palette.cardFill,
+                    shadowElevation = 12.dp
+                ) {
+                    DropdownMenuItem(
+                        text = {
+                            Text(
+                                text = stringResource(R.string.install_bundle),
+                                style = Ios.text.body,
+                                color = palette.label
+                            )
+                        },
+                        colors = MenuDefaults.itemColors(textColor = palette.label),
+                        onClick = {
+                            onMenuExpandedChange(false)
+                            onPickBundle()
+                        }
+                    )
+                }
             }
         }
     }
@@ -577,41 +580,55 @@ private fun Toolbar(
 
 @Composable
 private fun TabBar(
+    backdrop: GraphicsLayer,
     selectedTab: AppTab,
     bottomInset: Dp,
     modifier: Modifier,
     onSelect: (AppTab) -> Unit
 ) {
     val palette = Ios.palette
-    Row(
+    GlassSurface(
+        backdrop = backdrop,
+        shape = CapsuleCorner,
+        palette = palette,
         modifier = modifier
             .padding(bottom = bottomInset + 8.dp)
-            .glass(CapsuleCorner, palette)
-            .height(TabBarHeight),
-        verticalAlignment = Alignment.CenterVertically
+            .dropShadow(CapsuleCorner) {
+                radius = 18.dp.toPx()
+                color = palette.shadow
+                alpha = 0.16f
+                offset = Offset(0f, 6.dp.toPx())
+            }
+            .height(TabBarHeight)
     ) {
-        AppTab.entries.forEach { tab ->
-            val selected = selectedTab == tab
-            val tint = if (selected) palette.accent else palette.secondaryLabel
-            Column(
-                modifier = Modifier
-                    .widthIn(min = 88.dp)
-                    .fillMaxHeight()
-                    .clickable(
-                        interactionSource = remember { MutableInteractionSource() },
-                        indication = null
-                    ) { onSelect(tab) },
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Center
-            ) {
-                Icon(
-                    painter = painterResource(if (selected) tab.selectedIconRes else tab.iconRes),
-                    contentDescription = stringResource(tab.labelRes),
-                    tint = tint,
-                    modifier = Modifier.size(25.dp)
-                )
-                Spacer(Modifier.height(3.dp))
-                Text(text = stringResource(tab.labelRes), style = Ios.text.caption2, color = tint)
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxHeight()) {
+            AppTab.entries.forEach { tab ->
+                val selected = selectedTab == tab
+                val tint = if (selected) palette.accent else palette.secondaryLabel
+                Column(
+                    modifier = Modifier
+                        .widthIn(min = 88.dp)
+                        .fillMaxHeight()
+                        .clickable(
+                            interactionSource = remember { MutableInteractionSource() },
+                            indication = null
+                        ) { onSelect(tab) },
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center
+                ) {
+                    Icon(
+                        painter = painterResource(if (selected) tab.selectedIconRes else tab.iconRes),
+                        contentDescription = stringResource(tab.labelRes),
+                        tint = tint,
+                        modifier = Modifier.size(25.dp)
+                    )
+                    Spacer(Modifier.height(3.dp))
+                    Text(
+                        text = stringResource(tab.labelRes),
+                        style = Ios.text.caption2,
+                        color = tint
+                    )
+                }
             }
         }
     }
@@ -688,28 +705,6 @@ private fun ActivityIndicator(size: Dp, color: Color) {
         }
     }
 }
-
-private fun Modifier.glass(shape: Shape, palette: IosPalette): Modifier = this
-    .dropShadow(shape) {
-        radius = 18.dp.toPx()
-        color = palette.shadow
-        alpha = 0.16f
-        offset = Offset(0f, 6.dp.toPx())
-    }
-    .clip(shape)
-    .background(palette.material)
-    .innerShadow(shape) {
-        radius = 2.dp.toPx()
-        color = palette.materialSheen
-        offset = Offset(0f, 1.dp.toPx())
-    }
-    .innerShadow(shape) {
-        radius = 4.dp.toPx()
-        color = palette.materialRim
-        alpha = 0.5f
-        offset = Offset(0f, (-2).dp.toPx())
-    }
-    .border(Hairline, palette.materialRim, shape)
 
 private fun openUrlInBrowser(context: Context, url: String) {
     runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, url.toUri())) }
