@@ -11,11 +11,22 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.runtime.staticCompositionLocalOf
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Outline
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlin.math.min
+import kotlin.math.pow
 
 @Immutable
 data class IosPalette(
@@ -122,7 +133,63 @@ private val TextStyles = IosTextStyles(
     )
 )
 
-val CardCorner = RoundedCornerShape(16.dp)
+private const val CornerEdgeExtent = 1.528665f
+private const val CornerExponent = 2.479363f
+private const val CornerSegments = 24
+
+data class ContinuousCornerShape(val radius: Dp) : Shape {
+
+    override fun createOutline(
+        size: Size,
+        layoutDirection: LayoutDirection,
+        density: Density
+    ): Outline {
+        val limit = min(size.width, size.height) / (2f * CornerEdgeExtent)
+        val corner = min(with(density) { radius.toPx() }, limit)
+        if (corner <= 0f) return Outline.Rectangle(Rect(Offset.Zero, size))
+
+        val extent = CornerEdgeExtent * corner
+        val width = size.width
+        val height = size.height
+        val path = Path()
+
+        path.moveTo(extent, 0f)
+        path.lineTo(width - extent, 0f)
+        path.corner(width, 0f, -1f, 1f, extent, reversed = false)
+        path.lineTo(width, height - extent)
+        path.corner(width, height, -1f, -1f, extent, reversed = true)
+        path.lineTo(extent, height)
+        path.corner(0f, height, 1f, -1f, extent, reversed = false)
+        path.lineTo(0f, extent)
+        path.corner(0f, 0f, 1f, 1f, extent, reversed = true)
+        path.close()
+
+        return Outline.Generic(path)
+    }
+
+    private fun Path.corner(
+        originX: Float,
+        originY: Float,
+        signX: Float,
+        signY: Float,
+        extent: Float,
+        reversed: Boolean
+    ) {
+        for (step in 0..CornerSegments) {
+            val fraction = step.toFloat() / CornerSegments
+            val along = if (reversed) 1f - fraction else fraction
+            val inward = (1f - along.pow(CornerExponent)).coerceAtLeast(0f)
+            lineTo(
+                originX + signX * extent * (1f - along),
+                originY + signY * extent * (1f - inward.pow(1f / CornerExponent))
+            )
+        }
+    }
+}
+
+val CardCorner = ContinuousCornerShape(20.dp)
+val IconCorner = ContinuousCornerShape(12.5.dp)
+val MenuCorner = ContinuousCornerShape(14.dp)
 val CapsuleCorner = RoundedCornerShape(percent = 50)
 val Hairline = 0.5.dp
 

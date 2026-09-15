@@ -97,7 +97,9 @@ import com.android.apkupdater.data.repository.ScanStatus
 import com.android.apkupdater.ui.theme.CapsuleCorner
 import com.android.apkupdater.ui.theme.CardCorner
 import com.android.apkupdater.ui.theme.Hairline
+import com.android.apkupdater.ui.theme.IconCorner
 import com.android.apkupdater.ui.theme.Ios
+import com.android.apkupdater.ui.theme.MenuCorner
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -431,7 +433,7 @@ private fun UpdateRow(app: InstalledApp, update: AppUpdateInfo) {
         modifier = Modifier.fillMaxWidth().padding(RowInset),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Box(modifier = Modifier.size(AppIconSize).clip(RoundedCornerShape(12.dp))) {
+        Box(modifier = Modifier.size(AppIconSize).clip(IconCorner)) {
             iconBitmap?.let { bitmap ->
                 Image(
                     bitmap = bitmap.asImageBitmap(),
@@ -554,7 +556,7 @@ private fun Toolbar(
                 DropdownMenu(
                     expanded = menuExpanded,
                     onDismissRequest = { onMenuExpandedChange(false) },
-                    shape = RoundedCornerShape(14.dp),
+                    shape = MenuCorner,
                     containerColor = palette.cardFill,
                     shadowElevation = 12.dp
                 ) {
