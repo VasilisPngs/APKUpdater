@@ -13,15 +13,16 @@
 - Keep code clean, direct, idiomatic and maintainable.
 - All code is written in English.
 - Do not add explanatory or redundant comments inside code.
-- Use the latest appropriate official technologies, APIs, libraries and tools, and only their stable releases. Never depend on a preview, alpha, beta, release candidate or canary version.
+- Use the latest appropriate official technologies, APIs, libraries and tools, tracking the newest published build in any release channel, including preview, alpha, beta, release candidate and canary.
+- A newer toolchain is only acceptable while the signed release APK still installs on a release device; never compile against a preview Android platform, which stamps the package as preview built and makes it unparseable on release builds.
 - Verify current versions from official sources rather than relying on outdated examples.
 - Do not add a numeric product version to the visible product identity, release name, APK filename, release tag, or API User-Agent unless explicitly requested.
 
 ## Android
-- Use the latest appropriate official Kotlin, Jetpack Compose, Material 3, AndroidX, Android SDK, Android Gradle Plugin, Gradle and supported JDK.
-- Treat native Android/Google UI and UX as the product design standard across the entire application, using the official Material 3 components, layouts, typography, interaction patterns, navigation, loading and progress states, dialogs and controls wherever the platform provides a solution.
-- Never hand build an imitation of a native component, visual or behavior.
-- Use platform defaults and dynamic color where appropriate; do not create custom application-wide palettes or themes.
+- Use the latest appropriate official Kotlin, Jetpack Compose, AndroidX, Android SDK, Android Gradle Plugin, Gradle and supported JDK.
+- The product design standard is the shared design system used by the owner's other projects (Adblock, GymTracker): the same colour tokens, type scale, corner radii, spacing scale, motion curves, component shapes and interaction states, ported to Compose.
+- Build the interface from Compose foundation primitives so it matches that system exactly, rather than inheriting the visual defaults of Material 3; Material 3 remains the plumbing, not the appearance.
+- Keep every value in the shared token set and apply it consistently across all screens and components; do not use dynamic color and do not introduce one-off colours, sizes, radii or durations.
 - Obtain values from the relevant official platform API whenever the system or the device can provide them at runtime, including device capabilities, application metadata such as icons, labels and package information, locales and configuration, instead of assuming manufacturer-specific behavior or duplicating them in resources and hardcoded mappings.
 - Keep expensive work away from the UI thread.
 - Prefer current Android APIs and remove obsolete compatibility layers and workarounds.
