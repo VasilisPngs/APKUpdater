@@ -52,6 +52,7 @@ internal fun BackdropSurface(
     edgeHighlight: Color,
     modifier: Modifier = Modifier,
     blurRadius: Dp = BlurRadius,
+    observe: () -> Unit = {},
     content: @Composable BoxScope.() -> Unit = {}
 ) {
     val layer = rememberGraphicsLayer()
@@ -74,6 +75,7 @@ internal fun BackdropSurface(
             .onGloballyPositioned { origin = it.positionInRoot() }
             .clip(shape)
             .drawBehind {
+                observe()
                 layer.renderEffect = effect
                 layer.record(this, layoutDirection, size.toIntSize()) {
                     translate(-origin.x, -origin.y) { drawLayer(backdrop) }

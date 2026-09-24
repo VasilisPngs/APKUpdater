@@ -45,6 +45,8 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -83,6 +85,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
@@ -182,6 +185,7 @@ fun ApkUpdaterScreen(
         }
     }
 
+    val activeListState = if (selectedTab == AppTab.Home) homeListState else settingsListState
     val scanning = uiState.scanStatus == ScanStatus.Scanning
 
     Box(modifier = modifier.fillMaxSize()) {
@@ -237,6 +241,7 @@ fun ApkUpdaterScreen(
 
         TopBar(
             backdrop = backdrop,
+            observe = { activeListState.firstVisibleItemScrollOffset },
             height = topBarHeight,
             topInset = insets.calculateTopPadding(),
             scanning = scanning,
@@ -271,6 +276,7 @@ fun ApkUpdaterScreen(
 
         TabBar(
             backdrop = backdrop,
+            observe = { activeListState.firstVisibleItemScrollOffset },
             height = tabBarHeight,
             bottomInset = max(insets.calculateBottomPadding(), TabBarPadding),
             selectedTab = selectedTab,
@@ -307,7 +313,7 @@ private fun HomeView(
         ),
         verticalArrangement = Arrangement.spacedBy(Space.m)
     ) {
-        items(installs.values.toList(), key = InstallState::appName) { state ->
+        items(installs.entries.toList(), key = { it.key }) { (_, state) ->
             Card(tight = true) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
@@ -521,6 +527,7 @@ private fun Button(
                 interactionSource = interaction,
                 indication = null,
                 enabled = enabled,
+                role = Role.Button,
                 onClick = onClick
             )
             .padding(
@@ -573,6 +580,7 @@ private fun EmptyState(text: String) {
 @Composable
 private fun TopBar(
     backdrop: GraphicsLayer,
+    observe: () -> Unit,
     height: Dp,
     topInset: Dp,
     scanning: Boolean,
@@ -585,6 +593,7 @@ private fun TopBar(
         tint = colors.background.copy(alpha = 0.82f),
         shape = RectangleShape,
         edgeHighlight = colors.glassEdge,
+        observe = observe,
         modifier = Modifier.fillMaxWidth().height(height)
     ) {
         Row(
@@ -645,7 +654,7 @@ private fun StatusPill(scanning: Boolean, failed: Boolean, count: Int) {
 }
 
 @Composable
-private fun StatusDot(color: Color, pulsing: Boolean) {
+private fun pulseFactor(): Float {
     val transition = rememberInfiniteTransition(label = "pulse")
     val progress by transition.animateFloat(
         initialValue = 0f,
@@ -656,7 +665,12 @@ private fun StatusDot(color: Color, pulsing: Boolean) {
         ),
         label = "pulse"
     )
-    val factor = if (pulsing) progress else 0f
+    return progress
+}
+
+@Composable
+private fun StatusDot(color: Color, pulsing: Boolean) {
+    val factor = if (pulsing) pulseFactor() else 0f
 
     Box(
         modifier = Modifier
@@ -671,6 +685,7 @@ private fun StatusDot(color: Color, pulsing: Boolean) {
 @Composable
 private fun TabBar(
     backdrop: GraphicsLayer,
+    observe: () -> Unit,
     height: Dp,
     bottomInset: Dp,
     selectedTab: AppTab,
@@ -683,6 +698,7 @@ private fun TabBar(
         tint = colors.background.copy(alpha = 0.88f),
         shape = RectangleShape,
         edgeHighlight = colors.glassEdge,
+        observe = observe,
         modifier = modifier.fillMaxWidth().height(height)
     ) {
         Box(
@@ -720,10 +736,13 @@ private fun TabBar(
                         .alpha(fade)
                         .clip(ShapeM)
                         .background(fill)
-                        .clickable(
+                        .selectable(
+                            selected = selected,
                             interactionSource = interaction,
-                            indication = null
-                        ) { onSelect(tab) }
+                            indication = null,
+                            role = Role.Tab,
+                            onClick = { onSelect(tab) }
+                        )
                         .padding(vertical = TabBarPadding),
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.Center
@@ -765,10 +784,13 @@ private fun SwitchTrack(checked: Boolean, onCheckedChange: (Boolean) -> Unit) {
             .size(width = SwitchWidth, height = SwitchHeight)
             .clip(ShapePill)
             .background(track)
-            .clickable(
+            .toggleable(
+                value = checked,
                 interactionSource = remember { MutableInteractionSource() },
-                indication = null
-            ) { onCheckedChange(!checked) }
+                indication = null,
+                role = Role.Switch,
+                onValueChange = onCheckedChange
+            )
             .padding(SwitchInset),
         contentAlignment = Alignment.CenterStart
     ) {

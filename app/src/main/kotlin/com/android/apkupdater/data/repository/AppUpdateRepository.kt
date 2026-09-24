@@ -134,8 +134,10 @@ class AppUpdateRepository(
         )
 
     private fun fullVersionName(apk: ApkMirrorApk, releaseVersion: String): String {
-        val description = apk.description.trim()
-        val detailed = releaseVersion.isNotEmpty() && description.startsWith(releaseVersion)
+        val description = apk.description.trim().substringBefore('\n').trim()
+        val detailed = releaseVersion.isNotEmpty() &&
+            description.startsWith(releaseVersion) &&
+            description.length <= MAX_VERSION_NAME
         return if (detailed) description else releaseVersion
     }
 
@@ -225,6 +227,7 @@ class AppUpdateRepository(
         const val APKMIRROR_URL = "https://www.apkmirror.com"
         const val APKMIRROR_PATH_PREFIX = "/apk/"
         const val NO_DENSITY = "nodpi"
+        const val MAX_VERSION_NAME = 60
         val NEWEST_FIRST = compareByDescending<AppUpdateInfo> { it.publishedAt ?: Long.MIN_VALUE }
             .thenBy { it.appName.lowercase(Locale.ROOT) }
         const val UNSUPPORTED_ABI = Int.MAX_VALUE
